@@ -1,9 +1,11 @@
 package com.vbuser.cyrene;
 
 import com.vbuser.cyrene.editor.WelcomeServer;
+import com.vbuser.cyrene.editor.ProjectEditorServer;
 import com.vbuser.cyrene.env.JavaVersionChecker;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,6 +18,9 @@ public class Main {
             System.out.println("正在关闭文本编辑器...");
             if (WelcomeServer.getServer() != null) {
                 WelcomeServer.stopServer();
+            }
+            if (ProjectEditorServer.getServer() != null) {
+                ProjectEditorServer.stopServer();
             }
         }));
 
@@ -84,6 +89,9 @@ public class Main {
             if (WelcomeServer.getServer() != null) {
                 WelcomeServer.stopServer();
             }
+            if (ProjectEditorServer.getServer() != null) {
+                ProjectEditorServer.stopServer();
+            }
 
             pb.start();
             System.exit(0);
@@ -137,6 +145,26 @@ public class Main {
         } catch (Exception e) {
             System.err.println("启动过程出错: " + e.getMessage());
             throw new RuntimeException(e);
+        }
+    }
+
+    public static void openBrowser(String url) {
+        try {
+            String os = System.getProperty("os.name").toLowerCase();
+            Runtime runtime = Runtime.getRuntime();
+
+            if (os.contains("win")) {
+                runtime.exec("rundll32 url.dll,FileProtocolHandler " + url);
+            } else if (os.contains("mac")) {
+                runtime.exec(new String[]{"open", url});
+            } else if (os.contains("nix") || os.contains("nux")) {
+                runtime.exec(new String[]{"xdg-open", url});
+            } else {
+                System.out.println("无法自动打开浏览器，请手动访问: " + url);
+            }
+        } catch (IOException e) {
+            System.err.println("自动打开浏览器失败: " + e.getMessage());
+            System.out.println("请手动访问: " + url);
         }
     }
 }

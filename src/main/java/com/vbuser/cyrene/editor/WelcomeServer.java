@@ -9,13 +9,18 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.vbuser.cyrene.Main;
+import org.json.JSONObject;
 
 public class WelcomeServer {
     private static final int PORT = 8080;
     private static final String PROJECT_FILE = "project.txt";
     private static HttpServer server;
+    private static boolean isEditorMode = false;
 
     public static HttpServer getServer() {
         return server;
@@ -38,6 +43,8 @@ public class WelcomeServer {
             System.out.println("文本编辑器已启动: http://localhost:" + PORT);
             System.out.println("按 Ctrl+C 停止服务器");
 
+            Main.openBrowser("http://localhost:" + PORT);
+
         } catch (IOException e) {
             System.err.println("无法启动HTTP服务器: " + e.getMessage());
             throw new RuntimeException(e);
@@ -52,16 +59,24 @@ public class WelcomeServer {
         }
     }
 
+    public static void switchToEditorMode(String projectPath) {
+        System.out.println("切换到编辑器模式，项目路径: " + projectPath);
+        isEditorMode = true;
+        stopServer();
+        ProjectEditorServer.startServer(projectPath);
+    }
+
     static class StatusHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if ("GET".equals(exchange.getRequestMethod())) {
-                String response = String.format("                    {\n" +
-                        "                        \"status\": \"running\",\n" +
-                        "                        \"javaVersion\": \"%s\",\n" +
-                        "                        \"port\": %d,\n" +
-                        "                        \"timestamp\": %d\n" +
-                        "                    }", System.getProperty("java.version"), PORT, System.currentTimeMillis());
+                String response = String.format("{\n" +
+                                "    \"status\": \"%s\",\n" +
+                                "    \"javaVersion\": \"%s\",\n" +
+                                "    \"port\": %d,\n" +
+                                "    \"timestamp\": %d\n" +
+                                "}", isEditorMode ? "editing" : "welcome",
+                        System.getProperty("java.version"), PORT, System.currentTimeMillis());
 
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.getBytes().length);
@@ -76,13 +91,7 @@ public class WelcomeServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if ("GET".equals(exchange.getRequestMethod())) {
-                List<String> recentProjects = getRecentProjects();
-                String response;
-                if (recentProjects.isEmpty()) {
-                    response = getCreateProjectPage();
-                } else {
-                    response = getEditorPage();
-                }
+                String response = getCreateProjectPage();
                 exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
                 exchange.sendResponseHeaders(200, response.getBytes().length);
                 OutputStream os = exchange.getResponseBody();
@@ -96,22 +105,69 @@ public class WelcomeServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if ("POST".equals(exchange.getRequestMethod())) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(exchange.getRequestBody()));
-                String line;
-                StringBuilder body = new StringBuilder();
-                while ((line = reader.readLine()) != null) {
-                    body.append(line);
+                try {
+                    InputStream requestBody = exchange.getRequestBody();
+                    ByteArrayOutputStream result = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[1024];
+                    int length;
+                    while ((length = requestBody.read(buffer)) != -1) {
+                        result.write(buffer, 0, length);
+                    }
+                    String body = result.toString(StandardCharsets.UTF_8.name());
+
+                    String projectPath = "";
+                    if (body.startsWith("path=")) {
+                        projectPath = java.net.URLDecoder.decode(body.substring(5), "UTF-8");
+                    } else {
+                        String[] params = body.split("&");
+                        for (String param : params) {
+                            if (param.startsWith("path=")) {
+                                projectPath = java.net.URLDecoder.decode(param.substring(5), "UTF-8");
+                                break;
+                            }
+                        }
+                    }
+
+                    if (projectPath.isEmpty()) {
+                        sendErrorResponse(exchange, "项目路径不能为空");
+                        return;
+                    }
+
+                    Path projectDir = Paths.get(projectPath);
+                    if (!Files.exists(projectDir) || !Files.isDirectory(projectDir)) {
+                        sendErrorResponse(exchange, "项目路径不存在或不是目录: " + projectPath);
+                        return;
+                    }
+
+                    Path srcPath = Paths.get(projectPath, "src");
+                    Path runPath = Paths.get(projectPath, "run");
+                    if (!Files.exists(srcPath) || !Files.exists(runPath)) {
+                        sendErrorResponse(exchange, "项目结构不完整，缺少 src 或 run 目录");
+                        return;
+                    }
+
+                    saveProjectPath(projectPath);
+
+                    String successResponse = "{\"status\":\"success\",\"message\":\"项目已打开\"}";
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, successResponse.getBytes().length);
+                    OutputStream os = exchange.getResponseBody();
+                    os.write(successResponse.getBytes());
+                    os.close();
+
+                    String finalProjectPath = projectPath;
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(100);
+                            switchToEditorMode(finalProjectPath);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
+
+                } catch (Exception e) {
+                    sendErrorResponse(exchange, "打开项目失败: " + e.getMessage());
                 }
-
-                String projectPath = body.toString().replace("path=", "");
-                saveProjectPath(projectPath);
-
-                String response = "{\"status\":\"success\",\"message\":\"项目已打开\"}";
-                exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, response.getBytes().length);
-                OutputStream os = exchange.getResponseBody();
-                os.write(response.getBytes());
-                os.close();
             }
         }
     }
@@ -120,60 +176,89 @@ public class WelcomeServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if ("POST".equals(exchange.getRequestMethod())) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(exchange.getRequestBody()));
-                StringBuilder body = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    body.append(line);
-                }
-
-                String[] params = body.toString().split("&");
-                String projectName = "";
-                String projectPath = "";
-                boolean initGit = false;
-
-                for (String param : params) {
-                    if (param.startsWith("name=")) {
-                        projectName = java.net.URLDecoder.decode(param.substring(5), "UTF-8");
-                    } else if (param.startsWith("path=")) {
-                        projectPath = java.net.URLDecoder.decode(param.substring(5), "UTF-8");
-                    } else if (param.startsWith("git=")) {
-                        initGit = "true".equals(param.substring(4));
-                    }
-                }
-
-                String fullPath = projectPath + File.separator + projectName;
-
                 try {
-                    Files.createDirectories(Paths.get(fullPath));
+                    String[] params = getStrings(exchange);
+                    String projectName = "";
+                    String projectPath = "";
+                    boolean initGit = false;
 
-                    if (initGit) {
-                        ProcessBuilder pb = new ProcessBuilder("git", "init");
-                        pb.directory(new File(fullPath));
-                        Process process = pb.start();
-                        process.waitFor();
+                    for (String param : params) {
+                        if (param.startsWith("name=")) {
+                            projectName = java.net.URLDecoder.decode(param.substring(5), "UTF-8");
+                        } else if (param.startsWith("path=")) {
+                            projectPath = java.net.URLDecoder.decode(param.substring(5), "UTF-8");
+                        } else if (param.startsWith("git=")) {
+                            initGit = "true".equals(param.substring(4));
+                        }
                     }
 
-                    saveProjectPath(fullPath);
+                    if (projectName.isEmpty() || projectPath.isEmpty()) {
+                        sendErrorResponse(exchange, "项目名称和路径不能为空");
+                        return;
+                    }
 
-                    String escapedPath = fullPath.replace("\\", "\\\\").replace("\"", "\\\"");
-                    String response = "{\"status\":\"success\",\"message\":\"项目已创建\",\"path\":\"" + escapedPath + "\"}";
+                    String fullPath = projectPath + File.separator + projectName;
 
-                    exchange.getResponseHeaders().set("Content-Type", "application/json");
-                    exchange.sendResponseHeaders(200, response.getBytes().length);
-                    OutputStream os = exchange.getResponseBody();
-                    os.write(response.getBytes());
-                    os.close();
+                    try {
+                        Files.createDirectories(Paths.get(fullPath));
+
+                        Path srcPath = Paths.get(fullPath, "src");
+                        Path runPath = Paths.get(fullPath, "run");
+                        Files.createDirectories(srcPath);
+                        Files.createDirectories(runPath);
+
+                        if (initGit) {
+                            try {
+                                ProcessBuilder pb = new ProcessBuilder("git", "init");
+                                pb.directory(new File(fullPath));
+                                Process process = pb.start();
+                                process.waitFor();
+                            } catch (Exception e) {
+                                System.err.println("Git 初始化失败: " + e.getMessage());
+                            }
+                        }
+
+                        saveProjectPath(fullPath);
+
+                        String successResponse = "{\"status\":\"success\",\"message\":\"项目已创建\",\"path\":\"" +
+                                fullPath.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";
+
+                        exchange.getResponseHeaders().set("Content-Type", "application/json");
+                        exchange.sendResponseHeaders(200, successResponse.getBytes().length);
+                        OutputStream os = exchange.getResponseBody();
+                        os.write(successResponse.getBytes());
+                        os.close();
+
+                        new Thread(() -> {
+                            try {
+                                Thread.sleep(100);
+                                switchToEditorMode(fullPath);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        }).start();
+
+                    } catch (Exception e) {
+                        sendErrorResponse(exchange, "创建项目失败: " + e.getMessage());
+                    }
 
                 } catch (Exception e) {
-                    String response = "{\"status\":\"error\",\"message\":\"创建项目失败: " + e.getMessage().replace("\"", "\\\"") + "\"}";
-                    exchange.getResponseHeaders().set("Content-Type", "application/json");
-                    exchange.sendResponseHeaders(500, response.getBytes().length);
-                    OutputStream os = exchange.getResponseBody();
-                    os.write(response.getBytes());
-                    os.close();
+                    sendErrorResponse(exchange, "处理请求失败: " + e.getMessage());
                 }
             }
+        }
+
+        private static String[] getStrings(HttpExchange exchange) throws IOException {
+            InputStream requestBody = exchange.getRequestBody();
+            ByteArrayOutputStream result = new ByteArrayOutputStream();
+            byte[] buffer = new byte[1024];
+            int length;
+            while ((length = requestBody.read(buffer)) != -1) {
+                result.write(buffer, 0, length);
+            }
+            String body = result.toString(StandardCharsets.UTF_8.name());
+
+            return body.split("&");
         }
     }
 
@@ -182,7 +267,15 @@ public class WelcomeServer {
         public void handle(HttpExchange exchange) throws IOException {
             if ("GET".equals(exchange.getRequestMethod())) {
                 List<String> recentProjects = getRecentProjects();
-                String response = "{\"projects\":" + recentProjects + "}";
+                StringBuilder jsonBuilder = new StringBuilder();
+                jsonBuilder.append("{\"projects\":[");
+                for (int i = 0; i < recentProjects.size(); i++) {
+                    if (i > 0) jsonBuilder.append(",");
+                    jsonBuilder.append("\"").append(recentProjects.get(i).replace("\\", "\\\\").replace("\"", "\\\"")).append("\"");
+                }
+                jsonBuilder.append("]}");
+
+                String response = jsonBuilder.toString();
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.getBytes().length);
                 OutputStream os = exchange.getResponseBody();
@@ -207,9 +300,35 @@ public class WelcomeServer {
         }
     }
 
+    private static void sendErrorResponse(HttpExchange exchange, String message) throws IOException {
+        JSONObject response = new JSONObject();
+        response.put("status", "error");
+        response.put("message", message);
+
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(400, response.toString().getBytes().length);
+        OutputStream os = exchange.getResponseBody();
+        os.write(response.toString().getBytes());
+        os.close();
+    }
+
     private static void saveProjectPath(String path) {
-        try (PrintWriter out = new PrintWriter(new FileWriter(PROJECT_FILE, true))) {
-            out.println(path);
+        try {
+            List<String> existingProjects = getRecentProjects();
+
+            existingProjects.remove(path);
+
+            existingProjects.add(0, path);
+
+            if (existingProjects.size() > 10) {
+                existingProjects = existingProjects.subList(0, 10);
+            }
+
+            try (PrintWriter out = new PrintWriter(new FileWriter(PROJECT_FILE))) {
+                for (String project : existingProjects) {
+                    out.println(project);
+                }
+            }
         } catch (IOException e) {
             System.err.println("无法保存项目路径: " + e.getMessage());
         }
@@ -220,435 +339,490 @@ public class WelcomeServer {
         try {
             Path path = Paths.get(PROJECT_FILE);
             if (Files.exists(path)) {
-                projects = Files.readAllLines(path);
+                List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+                for (String line : lines) {
+                    String trimmed = line.trim();
+                    if (!trimmed.isEmpty() && Files.exists(Paths.get(trimmed))) {
+                        projects.add(trimmed);
+                    }
+                }
             }
         } catch (IOException e) {
             System.err.println("无法读取项目文件: " + e.getMessage());
         }
         return projects;
     }
-
     private static String getCreateProjectPage() {
         return "<!DOCTYPE html>\n" +
-                "            <html lang=\"zh-CN\">\n" +
-                "            <head>\n" +
-                "                <meta charset=\"UTF-8\">\n" +
-                "                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-                "                <title>Cyrene Editor - 创建新项目</title>\n" +
-                "                <link rel=\"stylesheet\" href=\"/static/style.css\">\n" +
-                "            </head>\n" +
-                "            <body>\n" +
-                "                <div class=\"container\">\n" +
-                "                    <header class=\"header\">\n" +
-                "                        <h1>Cyrene Editor</h1>\n" +
-                "                        <p>创建新项目</p>\n" +
-                "                    </header>\n" +
+                "<html lang=\"zh-CN\">\n" +
+                "<head>\n" +
+                "    <meta charset=\"UTF-8\">\n" +
+                "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+                "    <title>Cyrene Editor - 创建新项目</title>\n" +
+                "    <link rel=\"stylesheet\" href=\"/static/style.css\">\n" +
+                "</head>\n" +
+                "<body>\n" +
+                "    <div class=\"container\">\n" +
+                "        <header class=\"header\">\n" +
+                "            <h1>Cyrene Editor</h1>\n" +
+                "            <p>创建新项目</p>\n" +
+                "        </header>\n" +
+                "        \n" +
+                "        <main class=\"main-content\">\n" +
+                "            <div class=\"welcome-section\">\n" +
+                "                <form id=\"create-project-form\" class=\"project-form\">\n" +
+                "                    <div class=\"form-group\">\n" +
+                "                        <label for=\"project-name\">项目名称</label>\n" +
+                "                        <input type=\"text\" id=\"project-name\" name=\"project-name\" required>\n" +
+                "                    </div>\n" +
                 "                    \n" +
-                "                    <main class=\"main-content\">\n" +
-                "                        <div class=\"welcome-section\">\n" +
-                "                            <form id=\"create-project-form\" class=\"project-form\">\n" +
-                "                                <div class=\"form-group\">\n" +
-                "                                    <label for=\"project-name\">项目名称</label>\n" +
-                "                                    <input type=\"text\" id=\"project-name\" name=\"project-name\" required>\n" +
-                "                                </div>\n" +
-                "                                \n" +
-                "                                <div class=\"form-group\">\n" +
-                "                                    <label for=\"project-path\">项目路径</label>\n" +
-                "                                    <div class=\"path-input-group\">\n" +
-                "                                        <input type=\"text\" id=\"project-path\" name=\"project-path\" required>\n" +
-                "                                        <button type=\"button\" class=\"btn btn-outline\" onclick=\"selectFolder()\" disabled>\n" +
-                "                                            <span class=\"icon\">📁</span>\n" +
-                "                                            选择文件夹\n" +
-                "                                        </button>\n" +
-                "                                    </div>\n" +
-                "                                    <small class=\"hint\">由于浏览器限制，请手动输入项目路径</small>\n" +
-                "                                </div>\n" +
-                "                                \n" +
-                "                                <div class=\"form-group\">\n" +
-                "                                    <label class=\"checkbox-container\">\n" +
-                "                                        <input type=\"checkbox\" id=\"init-git\" name=\"init-git\">\n" +
-                "                                        <span class=\"checkmark\"></span>\n" +
-                "                                        <span class=\"checkbox-text\">初始化 Git 仓库</span>\n" +
-                "                                    </label>\n" +
-                "                                </div>\n" +
-                "                                \n" +
-                "                                <div class=\"form-actions\">\n" +
-                "                                    <button type=\"submit\" class=\"btn btn-primary\">\n" +
-                "                                        <span class=\"icon\">+</span>\n" +
-                "                                        创建项目\n" +
-                "                                    </button>\n" +
-                "                                    <button type=\"button\" class=\"btn btn-outline\" onclick=\"openExistingProject()\">\n" +
-                "                                        <span class=\"icon\">📂</span>\n" +
-                "                                        打开现有项目\n" +
-                "                                    </button>\n" +
-                "                                </div>\n" +
-                "                            </form>\n" +
+                "                    <div class=\"form-group\">\n" +
+                "                        <label for=\"project-path\">项目路径</label>\n" +
+                "                        <div class=\"path-input-group\">\n" +
+                "                            <input type=\"text\" id=\"project-path\" name=\"project-path\" required>\n" +
+                "                            <button type=\"button\" class=\"btn btn-outline\" onclick=\"selectFolder()\" disabled>\n" +
+                "                                <span class=\"icon\">📁</span>\n" +
+                "                                选择文件夹\n" +
+                "                            </button>\n" +
                 "                        </div>\n" +
-                "                    </main>\n" +
+                "                        <small class=\"hint\">由于浏览器限制，请手动输入项目路径</small>\n" +
+                "                    </div>\n" +
                 "                    \n" +
-                "                </div>\n" +
-                "                \n" +
-                "                <script>\n" +
-                "                    function selectFolder() {\n" +
-                "                        alert('由于浏览器安全限制，无法使用原生文件夹选择器。请手动输入项目路径。');\n" +
+                "                    <div class=\"form-group\">\n" +
+                "                        <label class=\"checkbox-container\">\n" +
+                "                            <input type=\"checkbox\" id=\"init-git\" name=\"init-git\">\n" +
+                "                            <span class=\"checkmark\"></span>\n" +
+                "                            <span class=\"checkbox-text\">初始化 Git 仓库</span>\n" +
+                "                        </label>\n" +
+                "                    </div>\n" +
+                "                    \n" +
+                "                    <div class=\"form-actions\">\n" +
+                "                        <button type=\"submit\" class=\"btn btn-primary\">\n" +
+                "                            <span class=\"icon\">+</span>\n" +
+                "                            创建项目\n" +
+                "                        </button>\n" +
+                "                        <button type=\"button\" class=\"btn btn-outline\" onclick=\"showRecentProjects()\">\n" +
+                "                            <span class=\"icon\">📂</span>\n" +
+                "                            打开现有项目\n" +
+                "                        </button>\n" +
+                "                    </div>\n" +
+                "                </form>\n" +
+                "            </div>\n" +
+                "        </main>\n" +
+                "    </div>\n" +
+                "    \n" +
+                "    <script>\n" +
+                "        function selectFolder() {\n" +
+                "            alert('由于浏览器安全限制，无法使用原生文件夹选择器。请手动输入项目路径。');\n" +
+                "        }\n" +
+                "        \n" +
+                "        function showRecentProjects() {\n" +
+                "            fetch('/api/recent-projects')\n" +
+                "                .then(response => response.json())\n" +
+                "                .then(data => {\n" +
+                "                    if (data.projects && data.projects.length > 0) {\n" +
+                "                        showProjectSelection(data.projects);\n" +
+                "                    } else {\n" +
+                "                        openExistingProject();\n" +
                 "                    }\n" +
-                "                    \n" +
-                "                    function openExistingProject() {\n" +
-                "                        const projectPath = prompt('请输入现有项目路径:');\n" +
-                "                        if (projectPath) {\n" +
-                "                            fetch('/api/open-project', {\n" +
-                "                                method: 'POST',\n" +
-                "                                headers: {\n" +
-                "                                    'Content-Type': 'application/x-www-form-urlencoded',\n" +
-                "                                },\n" +
-                "                                body: 'path=' + encodeURIComponent(projectPath)\n" +
-                "                            })\n" +
-                "                            .then(response => response.json())\n" +
-                "                            .then(data => {\n" +
-                "                                alert(data.message);\n" +
-                "                                window.location.reload();\n" +
-                "                            });\n" +
-                "                        }\n" +
+                "                })\n" +
+                "                .catch(error => {\n" +
+                "                    openExistingProject();\n" +
+                "                });\n" +
+                "        }\n" +
+                "\n" +
+                "        function showProjectSelection(projects) {\n" +
+                "            let html = '<h3>选择项目</h3><div class=\"projects-list\">';\n" +
+                "            projects.forEach(project => {\n" +
+                "                // 正确转义路径中的特殊字符\n" +
+                "                const escapedProject = project.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\");\n" +
+                "                const projectName = project.split(/[\\\\/]/).pop();\n" +
+                "                html += `<div class=\"project-item\">\n" +
+                "                    <div class=\"project-info\">\n" +
+                "                        <div class=\"project-name\">${projectName}</div>\n" +
+                "                        <div class=\"project-path\">${project}</div>\n" +
+                "                    </div>\n" +
+                "                    <button class=\"btn btn-primary\" onclick=\"openProject('${escapedProject}')\">打开</button>\n" +
+                "                </div>`;\n" +
+                "            });\n" +
+                "            html += '</div><div class=\"actions\"><button class=\"btn btn-outline\" onclick=\"openExistingProject()\">手动输入路径</button></div>';\n" +
+                "            \n" +
+                "            document.querySelector('.welcome-section').innerHTML = html;\n" +
+                "        }\n" +
+                "\n" +
+                "        function openProject(projectPath) {\n" +
+                "            console.log('Opening project:', projectPath);\n" +
+                "            fetch('/api/open-project', {\n" +
+                "                method: 'POST',\n" +
+                "                headers: {\n" +
+                "                    'Content-Type': 'application/x-www-form-urlencoded',\n" +
+                "                },\n" +
+                "                body: 'path=' + encodeURIComponent(projectPath)\n" +
+                "            })\n" +
+                "            .then(response => response.json())\n" +
+                "            .then(data => {\n" +
+                "                if (data.status === 'success') {\n" +
+                "                    alert('项目打开成功，即将切换到编辑器...');\n" +
+                "                } else {\n" +
+                "                    alert('打开失败: ' + data.message);\n" +
+                "                }\n" +
+                "            })\n" +
+                "            .catch(error => {\n" +
+                "                console.error('Error opening project:', error);\n" +
+                "                alert('打开失败: ' + error.message);\n" +
+                "            });\n" +
+                "        }\n" +
+                "        \n" +
+                "        function openExistingProject() {\n" +
+                "            const projectPath = prompt('请输入现有项目路径:');\n" +
+                "            if (projectPath) {\n" +
+                "                fetch('/api/open-project', {\n" +
+                "                    method: 'POST',\n" +
+                "                    headers: {\n" +
+                "                        'Content-Type': 'application/x-www-form-urlencoded',\n" +
+                "                    },\n" +
+                "                    body: 'path=' + encodeURIComponent(projectPath)\n" +
+                "                })\n" +
+                "                .then(response => response.json())\n" +
+                "                .then(data => {\n" +
+                "                    if (data.status === 'success') {\n" +
+                "                        alert('项目打开成功，即将切换到编辑器...');\n" +
+                "                    } else {\n" +
+                "                        alert('打开失败: ' + data.message);\n" +
                 "                    }\n" +
-                "                    \n" +
-                "                    document.getElementById('create-project-form').addEventListener('submit', function(e) {\n" +
-                "                        e.preventDefault();\n" +
-                "                        \n" +
-                "                        const projectName = document.getElementById('project-name').value;\n" +
-                "                        const projectPath = document.getElementById('project-path').value;\n" +
-                "                        const initGit = document.getElementById('init-git').checked;\n" +
-                "                        \n" +
-                "                        if (!projectName || !projectPath) {\n" +
-                "                            alert('请填写项目名称和路径');\n" +
-                "                            return;\n" +
-                "                        }\n" +
-                "                        \n" +
-                "                        fetch('/api/create-project', {\n" +
-                "                            method: 'POST',\n" +
-                "                            headers: {\n" +
-                "                                'Content-Type': 'application/x-www-form-urlencoded',\n" +
-                "                            },\n" +
-                "                            body: 'name=' + encodeURIComponent(projectName) + \n" +
-                "                                  '&path=' + encodeURIComponent(projectPath) + \n" +
-                "                                  '&git=' + initGit\n" +
-                "                        })\n" +
-                "                        .then(response => response.json())\n" +
-                "                        .then(data => {\n" +
-                "                            if (data.status === 'success') {\n" +
-                "                                alert('项目创建成功: ' + data.path);\n" +
-                "                                window.location.reload();\n" +
-                "                            } else {\n" +
-                "                                alert('创建失败: ' + data.message);\n" +
-                "                            }\n" +
-                "                        })\n" +
-                "                        .catch(error => {\n" +
-                "                            alert('创建失败: ' + error);\n" +
-                "                        });\n" +
-                "                    });\n" +
-                "                </script>\n" +
-                "            </body>\n" +
-                "            </html>";
-    }
-
-    private static String getEditorPage() {
-        return "<!DOCTYPE html>\n" +
-                "            <html lang=\"zh-CN\">\n" +
-                "            <head>\n" +
-                "                <meta charset=\"UTF-8\">\n" +
-                "                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-                "                <title>Cyrene Editor</title>\n" +
-                "                <link rel=\"stylesheet\" href=\"/static/style.css\">\n" +
-                "            </head>\n" +
-                "            <body>\n" +
-                "                <div class=\"container\">\n" +
-                "                    <header class=\"header\">\n" +
-                "                        <h1>Cyrene Editor</h1>\n" +
-                "                    </header>\n" +
-                "                    \n" +
-                "                    <main class=\"main-content\">\n" +
-                "                        <div class=\"editor-placeholder\">\n" +
-                "                            <h2>文本编辑器</h2>\n" +
-                "                            <p>编辑器界面正在开发中...</p>\n" +
-                "                            <button class=\"btn btn-outline\" onclick=\"showCreateProject()\">创建新项目</button>\n" +
-                "                        </div>\n" +
-                "                    </main>\n" +
-                "                </div>\n" +
-                "                \n" +
-                "                <script>\n" +
-                "                    function showCreateProject() {\n" +
-                "                        window.location.href = '/';\n" +
-                "                    }\n" +
-                "                </script>\n" +
-                "            </body>\n" +
-                "            </html>";
+                "                })\n" +
+                "                .catch(error => {\n" +
+                "                    console.error('Error opening project:', error);\n" +
+                "                    alert('打开失败: ' + error.message);\n" +
+                "                });\n" +
+                "            }\n" +
+                "        }\n" +
+                "        \n" +
+                "        document.getElementById('create-project-form').addEventListener('submit', function(e) {\n" +
+                "            e.preventDefault();\n" +
+                "            \n" +
+                "            const projectName = document.getElementById('project-name').value;\n" +
+                "            const projectPath = document.getElementById('project-path').value;\n" +
+                "            const initGit = document.getElementById('init-git').checked;\n" +
+                "            \n" +
+                "            if (!projectName || !projectPath) {\n" +
+                "                alert('请填写项目名称和路径');\n" +
+                "                return;\n" +
+                "            }\n" +
+                "            \n" +
+                "            fetch('/api/create-project', {\n" +
+                "                method: 'POST',\n" +
+                "                headers: {\n" +
+                "                    'Content-Type': 'application/x-www-form-urlencoded',\n" +
+                "                },\n" +
+                "                body: 'name=' + encodeURIComponent(projectName) + \n" +
+                "                      '&path=' + encodeURIComponent(projectPath) + \n" +
+                "                      '&git=' + initGit\n" +
+                "            })\n" +
+                "            .then(response => response.json())\n" +
+                "            .then(data => {\n" +
+                "                if (data.status === 'success') {\n" +
+                "                    alert('项目创建成功，即将切换到编辑器...');\n" +
+                "                } else {\n" +
+                "                    alert('创建失败: ' + data.message);\n" +
+                "                }\n" +
+                "            })\n" +
+                "            .catch(error => {\n" +
+                "                alert('创建失败: ' + error);\n" +
+                "            });\n" +
+                "        });\n" +
+                "    </script>\n" +
+                "</body>\n" +
+                "</html>";
     }
 
     private static String getCSS() {
         return ":root {\n" +
-                "                --bg-primary: #2b2b2b;\n" +
-                "                --bg-secondary: #3c3f41;\n" +
-                "                --bg-tertiary: #323232;\n" +
-                "                --text-primary: #cccccc;\n" +
-                "                --text-secondary: #999999;\n" +
-                "                --accent-color: #4e7ab5;\n" +
-                "                --accent-hover: #5a8ac8;\n" +
-                "                --border-color: #555555;\n" +
-                "                --success-color: #499c54;\n" +
-                "            }\n" +
-                "            \n" +
-                "            * {\n" +
-                "                margin: 0;\n" +
-                "                padding: 0;\n" +
-                "                box-sizing: border-box;\n" +
-                "            }\n" +
-                "            \n" +
-                "            body {\n" +
-                "                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n" +
-                "                background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);\n" +
-                "                color: var(--text-primary);\n" +
-                "                min-height: 100vh;\n" +
-                "                line-height: 1.6;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .container {\n" +
-                "                max-width: 900px;\n" +
-                "                margin: 0 auto;\n" +
-                "                min-height: 100vh;\n" +
-                "                display: flex;\n" +
-                "                flex-direction: column;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .header {\n" +
-                "                text-align: center;\n" +
-                "                padding: 3rem 2rem 2rem;\n" +
-                "                border-bottom: 1px solid var(--border-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .header h1 {\n" +
-                "                font-size: 2.5rem;\n" +
-                "                margin-bottom: 0.5rem;\n" +
-                "                background: linear-gradient(45deg, var(--accent-color), #67b0ff);\n" +
-                "                -webkit-background-clip: text;\n" +
-                "                -webkit-text-fill-color: transparent;\n" +
-                "                background-clip: text;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .header p {\n" +
-                "                color: var(--text-secondary);\n" +
-                "                font-size: 1.1rem;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .main-content {\n" +
-                "                flex: 1;\n" +
-                "                padding: 2rem;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .welcome-section {\n" +
-                "                background: var(--bg-secondary);\n" +
-                "                border-radius: 8px;\n" +
-                "                padding: 2rem;\n" +
-                "                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .project-form {\n" +
-                "                max-width: 500px;\n" +
-                "                margin: 0 auto;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .form-group {\n" +
-                "                margin-bottom: 1.5rem;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .form-group label {\n" +
-                "                display: block;\n" +
-                "                margin-bottom: 0.5rem;\n" +
-                "                color: var(--text-primary);\n" +
-                "                font-weight: 500;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .form-group input[type=\"text\"] {\n" +
-                "                width: 100%;\n" +
-                "                padding: 0.75rem;\n" +
-                "                background: var(--bg-tertiary);\n" +
-                "                border: 1px solid var(--border-color);\n" +
-                "                border-radius: 4px;\n" +
-                "                color: var(--text-primary);\n" +
-                "                font-size: 1rem;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .form-group input[type=\"text\"]:focus {\n" +
-                "                outline: none;\n" +
-                "                border-color: var(--accent-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .path-input-group {\n" +
-                "                display: flex;\n" +
-                "                gap: 0.5rem;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .path-input-group input {\n" +
-                "                flex: 1;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .hint {\n" +
-                "                color: var(--text-secondary);\n" +
-                "                font-size: 0.85rem;\n" +
-                "                margin-top: 0.25rem;\n" +
-                "                display: block;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .checkbox-container {\n" +
-                "                display: flex;\n" +
-                "                align-items: center;\n" +
-                "                cursor: pointer;\n" +
-                "                padding: 0.5rem 0;\n" +
-                "                font-weight: normal;\n" +
-                "                user-select: none;\n" +
-                "                white-space: nowrap;\n" +
-                "                line-height: 20px;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .checkbox-container input[type=\"checkbox\"] {\n" +
-                "                display: none;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .checkmark {\n" +
-                "                width: 20px;\n" +
-                "                height: 20px;\n" +
-                "                background: var(--bg-tertiary);\n" +
-                "                border: 2px solid var(--border-color);\n" +
-                "                border-radius: 4px;\n" +
-                "                margin-right: 8px;\n" +
-                "                position: relative;\n" +
-                "                transition: all 0.2s ease;\n" +
-                "                display: inline-block;\n" +
-                "                flex-shrink: 0;\n" +
-                "                vertical-align: middle;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .checkbox-container:hover .checkmark {\n" +
-                "                border-color: var(--accent-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .checkbox-container input[type=\"checkbox\"]:checked + .checkmark {\n" +
-                "                background: var(--accent-color);\n" +
-                "                border-color: var(--accent-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .checkbox-container input[type=\"checkbox\"]:checked + .checkmark::after {\n" +
-                "                content: '';\n" +
-                "                width: 5px;\n" +
-                "                height: 10px;\n" +
-                "                border: solid white;\n" +
-                "                border-width: 0 2px 2px 0;\n" +
-                "                transform: rotate(45deg);\n" +
-                "                position: absolute;\n" +
-                "                top: 2px;\n" +
-                "                left: 6px;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .checkbox-text {\n" +
-                "                display: inline;\n" +
-                "                color: var(--text-primary);\n" +
-                "                font-weight: normal;\n" +
-                "                vertical-align: middle;\n" +
-                "                line-height: 20px;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .form-actions {\n" +
-                "                display: flex;\n" +
-                "                gap: 1rem;\n" +
-                "                margin-top: 2rem;\n" +
-                "                flex-wrap: wrap;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .btn {\n" +
-                "                padding: 0.75rem 1.5rem;\n" +
-                "                border: none;\n" +
-                "                border-radius: 4px;\n" +
-                "                font-size: 1rem;\n" +
-                "                cursor: pointer;\n" +
-                "                transition: all 0.3s ease;\n" +
-                "                display: flex;\n" +
-                "                align-items: center;\n" +
-                "                gap: 0.5rem;\n" +
-                "                text-decoration: none;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .btn:disabled {\n" +
-                "                opacity: 0.5;\n" +
-                "                cursor: not-allowed;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .btn:disabled:hover {\n" +
-                "                transform: none;\n" +
-                "                background: transparent;\n" +
-                "                border-color: var(--border-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .btn-primary {\n" +
-                "                background: var(--accent-color);\n" +
-                "                color: white;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .btn-primary:hover {\n" +
-                "                background: var(--accent-hover);\n" +
-                "                transform: translateY(-2px);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .btn-outline {\n" +
-                "                background: transparent;\n" +
-                "                color: var(--text-primary);\n" +
-                "                border: 1px solid var(--border-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .btn-outline:hover {\n" +
-                "                background: var(--bg-tertiary);\n" +
-                "                border-color: var(--accent-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .editor-placeholder {\n" +
-                "                text-align: center;\n" +
-                "                padding: 4rem 2rem;\n" +
-                "                background: var(--bg-secondary);\n" +
-                "                margin: 2rem;\n" +
-                "                border-radius: 8px;\n" +
-                "            }\n" +
-                "            \n" +
-                "            .editor-placeholder h2 {\n" +
-                "                margin-bottom: 1rem;\n" +
-                "                color: var(--accent-color);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .editor-placeholder p {\n" +
-                "                margin-bottom: 2rem;\n" +
-                "                color: var(--text-secondary);\n" +
-                "            }\n" +
-                "            \n" +
-                "            .icon {\n" +
-                "                font-size: 1.1rem;\n" +
-                "            }\n" +
-                "            \n" +
-                "            @media (max-width: 768px) {\n" +
-                "                .form-actions {\n" +
-                "                    flex-direction: column;\n" +
-                "                }\n" +
-                "                \n" +
-                "                .btn {\n" +
-                "                    justify-content: center;\n" +
-                "                }\n" +
-                "                \n" +
-                "                .container {\n" +
-                "                    margin: 0;\n" +
-                "                }\n" +
-                "                \n" +
-                "                .main-content {\n" +
-                "                    padding: 1rem;\n" +
-                "                }\n" +
-                "                \n" +
-                "                .path-input-group {\n" +
-                "                    flex-direction: column;\n" +
-                "                }\n" +
-                "            }";
+                "    --bg-primary: #2b2b2b;\n" +
+                "    --bg-secondary: #3c3f41;\n" +
+                "    --bg-tertiary: #323232;\n" +
+                "    --text-primary: #cccccc;\n" +
+                "    --text-secondary: #999999;\n" +
+                "    --accent-color: #4e7ab5;\n" +
+                "    --accent-hover: #5a8ac8;\n" +
+                "    --border-color: #555555;\n" +
+                "    --success-color: #499c54;\n" +
+                "}\n" +
+                "\n" +
+                "* {\n" +
+                "    margin: 0;\n" +
+                "    padding: 0;\n" +
+                "    box-sizing: border-box;\n" +
+                "}\n" +
+                "\n" +
+                "body {\n" +
+                "    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;\n" +
+                "    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);\n" +
+                "    color: var(--text-primary);\n" +
+                "    min-height: 100vh;\n" +
+                "    line-height: 1.6;\n" +
+                "}\n" +
+                "\n" +
+                ".container {\n" +
+                "    max-width: 900px;\n" +
+                "    margin: 0 auto;\n" +
+                "    min-height: 100vh;\n" +
+                "    display: flex;\n" +
+                "    flex-direction: column;\n" +
+                "}\n" +
+                "\n" +
+                ".header {\n" +
+                "    text-align: center;\n" +
+                "    padding: 3rem 2rem 2rem;\n" +
+                "    border-bottom: 1px solid var(--border-color);\n" +
+                "}\n" +
+                "\n" +
+                ".header h1 {\n" +
+                "    font-size: 2.5rem;\n" +
+                "    margin-bottom: 0.5rem;\n" +
+                "    background: linear-gradient(45deg, var(--accent-color), #67b0ff);\n" +
+                "    -webkit-background-clip: text;\n" +
+                "    -webkit-text-fill-color: transparent;\n" +
+                "    background-clip: text;\n" +
+                "}\n" +
+                "\n" +
+                ".header p {\n" +
+                "    color: var(--text-secondary);\n" +
+                "    font-size: 1.1rem;\n" +
+                "}\n" +
+                "\n" +
+                ".main-content {\n" +
+                "    flex: 1;\n" +
+                "    padding: 2rem;\n" +
+                "}\n" +
+                "\n" +
+                ".welcome-section {\n" +
+                "    background: var(--bg-secondary);\n" +
+                "    border-radius: 8px;\n" +
+                "    padding: 2rem;\n" +
+                "    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);\n" +
+                "}\n" +
+                "\n" +
+                ".project-form {\n" +
+                "    max-width: 500px;\n" +
+                "    margin: 0 auto;\n" +
+                "}\n" +
+                "\n" +
+                ".form-group {\n" +
+                "    margin-bottom: 1.5rem;\n" +
+                "}\n" +
+                "\n" +
+                ".form-group label {\n" +
+                "    display: block;\n" +
+                "    margin-bottom: 0.5rem;\n" +
+                "    color: var(--text-primary);\n" +
+                "    font-weight: 500;\n" +
+                "}\n" +
+                "\n" +
+                ".form-group input[type=\"text\"] {\n" +
+                "    width: 100%;\n" +
+                "    padding: 0.75rem;\n" +
+                "    background: var(--bg-tertiary);\n" +
+                "    border: 1px solid var(--border-color);\n" +
+                "    border-radius: 4px;\n" +
+                "    color: var(--text-primary);\n" +
+                "    font-size: 1rem;\n" +
+                "}\n" +
+                "\n" +
+                ".form-group input[type=\"text\"]:focus {\n" +
+                "    outline: none;\n" +
+                "    border-color: var(--accent-color);\n" +
+                "}\n" +
+                "\n" +
+                ".path-input-group {\n" +
+                "    display: flex;\n" +
+                "    gap: 0.5rem;\n" +
+                "}\n" +
+                "\n" +
+                ".path-input-group input {\n" +
+                "    flex: 1;\n" +
+                "}\n" +
+                "\n" +
+                ".hint {\n" +
+                "    color: var(--text-secondary);\n" +
+                "    font-size: 0.85rem;\n" +
+                "    margin-top: 0.25rem;\n" +
+                "    display: block;\n" +
+                "}\n" +
+                "\n" +
+                ".checkbox-container {\n" +
+                "    display: flex;\n" +
+                "    align-items: center;\n" +
+                "    cursor: pointer;\n" +
+                "    padding: 0.5rem 0;\n" +
+                "    font-weight: normal;\n" +
+                "    user-select: none;\n" +
+                "    white-space: nowrap;\n" +
+                "    line-height: 20px;\n" +
+                "}\n" +
+                "\n" +
+                ".checkbox-container input[type=\"checkbox\"] {\n" +
+                "    display: none;\n" +
+                "}\n" +
+                "\n" +
+                ".checkmark {\n" +
+                "    width: 20px;\n" +
+                "    height: 20px;\n" +
+                "    background: var(--bg-tertiary);\n" +
+                "    border: 2px solid var(--border-color);\n" +
+                "    border-radius: 4px;\n" +
+                "    margin-right: 8px;\n" +
+                "    position: relative;\n" +
+                "    transition: all 0.2s ease;\n" +
+                "    display: inline-block;\n" +
+                "    flex-shrink: 0;\n" +
+                "    vertical-align: middle;\n" +
+                "}\n" +
+                "\n" +
+                ".checkbox-container:hover .checkmark {\n" +
+                "    border-color: var(--accent-color);\n" +
+                "}\n" +
+                "\n" +
+                ".checkbox-container input[type=\"checkbox\"]:checked + .checkmark {\n" +
+                "    background: var(--accent-color);\n" +
+                "    border-color: var(--accent-color);\n" +
+                "}\n" +
+                "\n" +
+                ".checkbox-container input[type=\"checkbox\"]:checked + .checkmark::after {\n" +
+                "    content: '';\n" +
+                "    width: 5px;\n" +
+                "    height: 10px;\n" +
+                "    border: solid white;\n" +
+                "    border-width: 0 2px 2px 0;\n" +
+                "    transform: rotate(45deg);\n" +
+                "    position: absolute;\n" +
+                "    top: 2px;\n" +
+                "    left: 6px;\n" +
+                "}\n" +
+                "\n" +
+                ".checkbox-text {\n" +
+                "    display: inline;\n" +
+                "    color: var(--text-primary);\n" +
+                "    font-weight: normal;\n" +
+                "    vertical-align: middle;\n" +
+                "    line-height: 20px;\n" +
+                "}\n" +
+                "\n" +
+                ".form-actions {\n" +
+                "    display: flex;\n" +
+                "    gap: 1rem;\n" +
+                "    margin-top: 2rem;\n" +
+                "    flex-wrap: wrap;\n" +
+                "}\n" +
+                "\n" +
+                ".btn {\n" +
+                "    padding: 0.75rem 1.5rem;\n" +
+                "    border: none;\n" +
+                "    border-radius: 4px;\n" +
+                "    font-size: 1rem;\n" +
+                "    cursor: pointer;\n" +
+                "    transition: all 0.3s ease;\n" +
+                "    display: flex;\n" +
+                "    align-items: center;\n" +
+                "    gap: 0.5rem;\n" +
+                "    text-decoration: none;\n" +
+                "}\n" +
+                "\n" +
+                ".btn:disabled {\n" +
+                "    opacity: 0.5;\n" +
+                "    cursor: not-allowed;\n" +
+                "}\n" +
+                "\n" +
+                ".btn:disabled:hover {\n" +
+                "    transform: none;\n" +
+                "    background: transparent;\n" +
+                "    border-color: var(--border-color);\n" +
+                "}\n" +
+                "\n" +
+                ".btn-primary {\n" +
+                "    background: var(--accent-color);\n" +
+                "    color: white;\n" +
+                "}\n" +
+                "\n" +
+                ".btn-primary:hover {\n" +
+                "    background: var(--accent-hover);\n" +
+                "    transform: translateY(-2px);\n" +
+                "}\n" +
+                "\n" +
+                ".btn-outline {\n" +
+                "    background: transparent;\n" +
+                "    color: var(--text-primary);\n" +
+                "    border: 1px solid var(--border-color);\n" +
+                "}\n" +
+                "\n" +
+                ".btn-outline:hover {\n" +
+                "    background: var(--bg-tertiary);\n" +
+                "    border-color: var(--accent-color);\n" +
+                "}\n" +
+                "\n" +
+                ".icon {\n" +
+                "    font-size: 1.1rem;\n" +
+                "}\n" +
+                "\n" +
+                ".projects-list {\n" +
+                "    margin-top: 2rem;\n" +
+                "}\n" +
+                "\n" +
+                ".project-item {\n" +
+                "    display: flex;\n" +
+                "    justify-content: space-between;\n" +
+                "    align-items: center;\n" +
+                "    padding: 1rem;\n" +
+                "    background: var(--bg-tertiary);\n" +
+                "    border-radius: 6px;\n" +
+                "    margin-bottom: 1rem;\n" +
+                "}\n" +
+                "\n" +
+                ".project-info {\n" +
+                "    flex: 1;\n" +
+                "}\n" +
+                "\n" +
+                ".project-name {\n" +
+                "    font-weight: 600;\n" +
+                "    margin-bottom: 0.25rem;\n" +
+                "}\n" +
+                "\n" +
+                ".project-path {\n" +
+                "    font-size: 0.9rem;\n" +
+                "    color: var(--text-secondary);\n" +
+                "}\n" +
+                "\n" +
+                ".actions {\n" +
+                "    margin-top: 2rem;\n" +
+                "    text-align: center;\n" +
+                "}\n" +
+                "\n" +
+                "@media (max-width: 768px) {\n" +
+                "    .form-actions {\n" +
+                "        flex-direction: column;\n" +
+                "    }\n" +
+                "    \n" +
+                "    .btn {\n" +
+                "        justify-content: center;\n" +
+                "    }\n" +
+                "    \n" +
+                "    .container {\n" +
+                "        margin: 0;\n" +
+                "    }\n" +
+                "    \n" +
+                "    .main-content {\n" +
+                "        padding: 1rem;\n" +
+                "    }\n" +
+                "    \n" +
+                "    .path-input-group {\n" +
+                "        flex-direction: column;\n" +
+                "    }\n" +
+                "    \n" +
+                "    .project-item {\n" +
+                "        flex-direction: column;\n" +
+                "        align-items: flex-start;\n" +
+                "        gap: 1rem;\n" +
+                "    }\n" +
+                "}";
     }
 }
