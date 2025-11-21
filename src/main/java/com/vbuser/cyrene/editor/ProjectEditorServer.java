@@ -95,7 +95,7 @@ public class ProjectEditorServer {
         public void handle(HttpExchange exchange) throws IOException {
             if ("GET".equals(exchange.getRequestMethod())) {
                 try {
-                    JSONArray fileTree = buildFileTree(Paths.get(currentProjectPath));
+                    JSONArray fileTree = buildFileTree(Paths.get(currentProjectPath), "");
                     String response = fileTree.toString();
 
                     exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -109,7 +109,7 @@ public class ProjectEditorServer {
             }
         }
 
-        private JSONArray buildFileTree(Path rootPath) throws IOException {
+        private JSONArray buildFileTree(Path rootPath, String currentRelativePath) throws IOException {
             JSONArray result = new JSONArray();
 
             if (Files.exists(rootPath) && Files.isDirectory(rootPath)) {
@@ -133,12 +133,19 @@ public class ProjectEditorServer {
 
                         JSONObject item = new JSONObject();
                         item.put("name", fileName);
-                        item.put("path", rootPath.relativize(path).toString());
+
+                        String relativePath;
+                        if (currentRelativePath.isEmpty()) {
+                            relativePath = fileName;
+                        } else {
+                            relativePath = currentRelativePath + "/" + fileName;
+                        }
+                        relativePath = relativePath.replace("\\", "/");
+                        item.put("path", relativePath);
                         item.put("type", Files.isDirectory(path) ? "directory" : getFileType(fileName));
 
                         if (Files.isDirectory(path)) {
-                            item.put("children", buildFileTree(path));
-                            item.put("expanded", false);
+                            item.put("children", buildFileTree(path, relativePath));
                         }
 
                         result.put(item);
@@ -151,7 +158,7 @@ public class ProjectEditorServer {
 
         private String getFileType(String fileName) {
             if (fileName.endsWith(".cyr")) return "cyr";
-            if (fileName.endsWith(".ndm")) return "ndm";
+            if (fileName.endsWith(".phn")) return "phn";
             return "file";
         }
     }
@@ -185,10 +192,10 @@ public class ProjectEditorServer {
                             return;
                         }
                     } catch (Exception e) {
-                        System.out.println(e.getMessage());
+                        System.out.println("读取文件错误: " + e.getMessage());
                     }
                 }
-                sendErrorResponse(exchange, "文件不存在或无法读取");
+                sendErrorResponse(exchange, "文件不存在或无法读取: " + filePath);
             }
         }
     }
@@ -247,22 +254,33 @@ public class ProjectEditorServer {
                 try {
                     JSONObject request = getJsonObject(exchange);
 
+                    System.out.println("创建请求: " + request);
+
                     String type = request.getString("type");
-                    String path = request.getString("path");
+                    String parentPath = request.optString("path", "");
                     String name = request.getString("name");
 
-                    Path fullPath = Paths.get(currentProjectPath, path, name);
+                    Path fullPath;
+                    if (parentPath == null || parentPath.isEmpty()) {
+                        fullPath = Paths.get(currentProjectPath, name);
+                        System.out.println("在根目录创建: " + fullPath);
+                    } else {
+                        fullPath = Paths.get(currentProjectPath, parentPath, name);
+                        System.out.println("在目录 " + parentPath + " 下创建: " + fullPath);
+                    }
 
                     if ("directory".equals(type)) {
                         Files.createDirectories(fullPath);
+                        System.out.println("创建目录: " + fullPath);
                     } else {
                         String extension = "";
                         if ("cyr".equals(type)) extension = ".cyr";
-                        else if ("ndm".equals(type)) extension = ".ndm";
+                        else if ("phn".equals(type)) extension = ".phn";
 
                         fullPath = Paths.get(fullPath + extension);
                         Files.createDirectories(fullPath.getParent());
                         Files.write(fullPath, new byte[0]);
+                        System.out.println("创建文件: " + fullPath);
                     }
 
                     JSONObject response = new JSONObject();
@@ -276,6 +294,7 @@ public class ProjectEditorServer {
                     os.close();
 
                 } catch (Exception e) {
+                    System.err.println("创建失败: " + e.getMessage());
                     sendErrorResponse(exchange, "创建失败: " + e.getMessage());
                 }
             }
@@ -290,6 +309,8 @@ public class ProjectEditorServer {
                 result.write(buffer, 0, length);
             }
             String body = result.toString(StandardCharsets.UTF_8.name());
+
+            System.out.println("请求体: " + body);
 
             return new JSONObject(body);
         }
@@ -434,7 +455,11 @@ public class ProjectEditorServer {
         for (String pair : pairs) {
             String[] keyValue = pair.split("=");
             if (keyValue.length == 2 && keyValue[0].equals("path")) {
-                return keyValue[1];
+                try {
+                    return java.net.URLDecoder.decode(keyValue[1], "UTF-8");
+                } catch (UnsupportedEncodingException e) {
+                    return keyValue[1];
+                }
             }
         }
         return null;
@@ -442,7 +467,7 @@ public class ProjectEditorServer {
 
     private static String getFileType(String fileName) {
         if (fileName.endsWith(".cyr")) return "cyr";
-        if (fileName.endsWith(".ndm")) return "ndm";
+        if (fileName.endsWith(".phn")) return "phn";
         return "file";
     }
 
@@ -509,14 +534,13 @@ public class ProjectEditorServer {
                 "                    <select id=\"create-type\" name=\"type\">\n" +
                 "                        <option value=\"directory\">文件夹</option>\n" +
                 "                        <option value=\"cyr\">文本文件 (.cyr)</option>\n" +
-                "                        <option value=\"ndm\">节点图文件 (.ndm)</option>\n" +
+                "                        <option value=\"phn\">节点图文件 (.phn)</option>\n" +
                 "                    </select>\n" +
                 "                </div>\n" +
                 "                <div class=\"form-group\">\n" +
                 "                    <label for=\"create-name\">名称</label>\n" +
                 "                    <input type=\"text\" id=\"create-name\" name=\"name\" required>\n" +
                 "                </div>\n" +
-                "                <input type=\"hidden\" id=\"create-path\" name=\"path\">\n" +
                 "                <div class=\"form-actions\">\n" +
                 "                    <button type=\"button\" class=\"btn btn-outline\" id=\"cancel-create\">取消</button>\n" +
                 "                    <button type=\"submit\" class=\"btn btn-primary\">创建</button>\n" +
@@ -525,10 +549,13 @@ public class ProjectEditorServer {
                 "        </div>\n" +
                 "    </div>\n" +
                 "    \n" +
-                "    <script>\n" +
+                "<script>\n" +
                 "        let currentFile = null;\n" +
+                "        let currentSelectedPath = null;\n" +
+                "        let currentSelectedType = null;\n" +
                 "        let isUnsaved = false;\n" +
                 "        let saveTimeout = null;\n" +
+                "        let isCreating = false;\n" +
                 "\n" +
                 "        document.addEventListener('DOMContentLoaded', function() {\n" +
                 "            loadFileTree();\n" +
@@ -543,9 +570,16 @@ public class ProjectEditorServer {
                 "\n" +
                 "            document.getElementById('refresh-tree').addEventListener('click', loadFileTree);\n" +
                 "\n" +
-                "            document.getElementById('create-new').addEventListener('click', showCreateModal);\n" +
+                "            document.getElementById('create-new').addEventListener('click', function(e) {\n" +
+                "                e.stopPropagation();\n" +
+                "                isCreating = true;\n" +
+                "                showCreateModal();\n" +
+                "            });\n" +
                 "            document.getElementById('create-form').addEventListener('submit', handleCreate);\n" +
-                "            document.getElementById('cancel-create').addEventListener('click', hideCreateModal);\n" +
+                "            document.getElementById('cancel-create').addEventListener('click', function() {\n" +
+                "                isCreating = false;\n" +
+                "                hideCreateModal();\n" +
+                "            });\n" +
                 "\n" +
                 "            document.getElementById('code-editor').addEventListener('input', function() {\n" +
                 "                if (currentFile) {\n" +
@@ -554,6 +588,51 @@ public class ProjectEditorServer {
                 "                    updateLineNumbers();\n" +
                 "                }\n" +
                 "            });\n" +
+                "\n" +
+                "            document.addEventListener('click', function(e) {\n" +
+                "                if (!e.target.closest('.tree-item') && !e.target.closest('.sidebar-actions') && !isCreating) {\n" +
+                "                    clearSelection();\n" +
+                "                }\n" +
+                "            });\n" +
+                "        }\n" +
+                "\n" +
+                "        function clearSelection() {\n" +
+                "            const selected = document.querySelectorAll('.tree-item.selected');\n" +
+                "            selected.forEach(item => {\n" +
+                "                item.classList.remove('selected');\n" +
+                "            });\n" +
+                "            currentSelectedPath = null;\n" +
+                "            currentSelectedType = null;\n" +
+                "        }\n" +
+                "\n" +
+                "        function selectNode(element) {\n" +
+                "            clearSelection();\n" +
+                "            element.classList.add('selected');\n" +
+                "            currentSelectedPath = element.dataset.path;\n" +
+                "            currentSelectedType = element.dataset.type;\n" +
+                "            console.log('选中节点: 路径=', currentSelectedPath, '类型=', currentSelectedType);\n" +
+                "        }\n" +
+                "\n" +
+                "        function getCreatePath() {\n" +
+                "            let createPath = '';\n" +
+                "            \n" +
+                "            console.log('getCreatePath - 当前选中:', {\n" +
+                "                path: currentSelectedPath,\n" +
+                "                type: currentSelectedType\n" +
+                "            });\n" +
+                "            \n" +
+                "            if (currentSelectedPath && currentSelectedType) {\n" +
+                "                if (currentSelectedType === 'directory') {\n" +
+                "                    createPath = currentSelectedPath;\n" +
+                "                } else {\n" +
+                "                    const pathParts = currentSelectedPath.split('/');\n" +
+                "                    pathParts.pop();\n" +
+                "                    createPath = pathParts.join('/');\n" +
+                "                }\n" +
+                "            }\n" +
+                "            \n" +
+                "            console.log('getCreatePath - 返回路径:', createPath);\n" +
+                "            return createPath;\n" +
                 "        }\n" +
                 "\n" +
                 "        function loadFileTree() {\n" +
@@ -583,6 +662,9 @@ public class ProjectEditorServer {
                 "\n" +
                 "            const treeItem = document.createElement('div');\n" +
                 "            treeItem.className = 'tree-item';\n" +
+                "            \n" +
+                "            treeItem.setAttribute('data-path', file.path);\n" +
+                "            treeItem.setAttribute('data-type', file.type);\n" +
                 "            treeItem.dataset.path = file.path;\n" +
                 "            treeItem.dataset.type = file.type;\n" +
                 "\n" +
@@ -597,24 +679,45 @@ public class ProjectEditorServer {
                 "            treeItem.appendChild(icon);\n" +
                 "            treeItem.appendChild(name);\n" +
                 "\n" +
+                "            treeItem.addEventListener('click', function(e) {\n" +
+                "                e.stopPropagation();\n" +
+                "                console.log('点击节点 - data-path:', this.getAttribute('data-path'), \n" +
+                "                            'dataset.path:', this.dataset.path);\n" +
+                "                selectNode(this);\n" +
+                "            });\n" +
+                "\n" +
                 "            if (file.type === 'directory') {\n" +
-                "                treeItem.addEventListener('click', function(e) {\n" +
+                "                const expandIcon = document.createElement('span');\n" +
+                "                expandIcon.className = 'tree-expand-icon';\n" +
+                "                expandIcon.textContent = '▶';\n" +
+                "                treeItem.insertBefore(expandIcon, icon);\n" +
+                "\n" +
+                "                expandIcon.addEventListener('click', function(e) {\n" +
                 "                    e.stopPropagation();\n" +
-                "                    toggleDirectory(this);\n" +
+                "                    toggleDirectory(this.parentElement, file);\n" +
+                "                });\n" +
+                "\n" +
+                "                treeItem.addEventListener('dblclick', function(e) {\n" +
+                "                    e.stopPropagation();\n" +
+                "                    toggleDirectory(this, file);\n" +
+                "                });\n" +
+                "\n" +
+                "                treeItem.addEventListener('contextmenu', function(e) {\n" +
+                "                    e.preventDefault();\n" +
+                "                    showContextMenu(e, file);\n" +
                 "                });\n" +
                 "\n" +
                 "                const childrenContainer = document.createElement('div');\n" +
                 "                childrenContainer.className = 'tree-children';\n" +
                 "                \n" +
-                "                if (file.expanded && file.children) {\n" +
-                "                    childrenContainer.classList.add('expanded');\n" +
-                "                    renderFileTree(file.children, childrenContainer);\n" +
+                "                if (file.children && file.children.length > 0) {\n" +
+                "                    treeItem.dataset.hasChildren = 'true';\n" +
                 "                }\n" +
                 "\n" +
                 "                item.appendChild(treeItem);\n" +
                 "                item.appendChild(childrenContainer);\n" +
                 "            } else {\n" +
-                "                treeItem.addEventListener('click', function() {\n" +
+                "                treeItem.addEventListener('dblclick', function() {\n" +
                 "                    openFile(file.path, file.type);\n" +
                 "                });\n" +
                 "\n" +
@@ -633,21 +736,25 @@ public class ProjectEditorServer {
                 "            switch (file.type) {\n" +
                 "                case 'directory': return '📁';\n" +
                 "                case 'cyr': return '📄';\n" +
-                "                case 'ndm': return '📊';\n" +
+                "                case 'phn': return '📊';\n" +
                 "                default: return '📄';\n" +
                 "            }\n" +
                 "        }\n" +
                 "\n" +
-                "        function toggleDirectory(element) {\n" +
+                "        function toggleDirectory(element, file) {\n" +
+                "            const expandIcon = element.querySelector('.tree-expand-icon');\n" +
                 "            const children = element.parentElement.querySelector('.tree-children');\n" +
                 "            const isExpanded = children.classList.contains('expanded');\n" +
                 "\n" +
                 "            if (isExpanded) {\n" +
                 "                children.classList.remove('expanded');\n" +
+                "                expandIcon.textContent = '▶';\n" +
                 "            } else {\n" +
                 "                children.classList.add('expanded');\n" +
-                "                if (children.children.length === 0) {\n" +
-                "                    const path = element.dataset.path;\n" +
+                "                expandIcon.textContent = '▼';\n" +
+                "                \n" +
+                "                if (children.children.length === 0 && file.children && file.children.length > 0) {\n" +
+                "                    renderFileTree(file.children, children);\n" +
                 "                }\n" +
                 "            }\n" +
                 "        }\n" +
@@ -739,11 +846,14 @@ public class ProjectEditorServer {
                 "        }\n" +
                 "\n" +
                 "        function showCreateModal() {\n" +
+                "            console.log('当前选中路径:', currentSelectedPath);\n" +
+                "            console.log('当前选中类型:', currentSelectedType);\n" +
                 "            document.getElementById('create-modal').classList.remove('hidden');\n" +
                 "            document.getElementById('create-name').focus();\n" +
                 "        }\n" +
                 "\n" +
                 "        function hideCreateModal() {\n" +
+                "            isCreating = false;\n" +
                 "            document.getElementById('create-modal').classList.add('hidden');\n" +
                 "            document.getElementById('create-form').reset();\n" +
                 "        }\n" +
@@ -753,18 +863,30 @@ public class ProjectEditorServer {
                 "            \n" +
                 "            const type = document.getElementById('create-type').value;\n" +
                 "            const name = document.getElementById('create-name').value;\n" +
-                "            const path = document.getElementById('create-path').value || '';\n" +
+                "            const parentPath = getCreatePath();\n" +
+                "            \n" +
+                "            console.log('提交创建请求:', { type, name, parentPath });\n" +
+                "            \n" +
+                "            const requestData = {\n" +
+                "                type: type,\n" +
+                "                name: name\n" +
+                "            };\n" +
+                "            \n" +
+                "            if (parentPath !== undefined && parentPath !== null && parentPath !== '') {\n" +
+                "                requestData.path = parentPath;\n" +
+                "                console.log('包含路径参数:', parentPath);\n" +
+                "            } else {\n" +
+                "                console.log('没有路径参数，将在根目录创建');\n" +
+                "            }\n" +
+                "            \n" +
+                "            console.log('实际发送的请求数据:', requestData);\n" +
                 "            \n" +
                 "            fetch('/api/file/create', {\n" +
                 "                method: 'POST',\n" +
                 "                headers: {\n" +
                 "                    'Content-Type': 'application/json',\n" +
                 "                },\n" +
-                "                body: JSON.stringify({\n" +
-                "                    type: type,\n" +
-                "                    path: path,\n" +
-                "                    name: name\n" +
-                "                })\n" +
+                "                body: JSON.stringify(requestData)\n" +
                 "            })\n" +
                 "            .then(response => response.json())\n" +
                 "            .then(data => {\n" +
@@ -966,6 +1088,7 @@ public class ProjectEditorServer {
                 "    transition: width 0.3s ease;\n" +
                 "    height: calc(100vh - var(--header-height));\n" +
                 "    overflow: hidden;\n" +
+                "    flex-shrink: 0;\n" +
                 "}\n" +
                 "\n" +
                 ".sidebar.collapsed {\n" +
@@ -995,12 +1118,15 @@ public class ProjectEditorServer {
                 ".file-tree {\n" +
                 "    flex: 1;\n" +
                 "    overflow-y: auto;\n" +
+                "    overflow-x: auto;\n" +
                 "    padding: 0.5rem;\n" +
                 "    height: 100%;\n" +
+                "    min-width: min-content;\n" +
                 "}\n" +
                 "\n" +
                 ".tree-node {\n" +
                 "    margin: 2px 0;\n" +
+                "    min-width: min-content;\n" +
                 "}\n" +
                 "\n" +
                 ".tree-item {\n" +
@@ -1011,6 +1137,8 @@ public class ProjectEditorServer {
                 "    cursor: pointer;\n" +
                 "    user-select: none;\n" +
                 "    transition: background 0.2s ease;\n" +
+                "    white-space: nowrap;\n" +
+                "    min-width: fit-content;\n" +
                 "}\n" +
                 "\n" +
                 ".tree-item:hover {\n" +
@@ -1019,12 +1147,32 @@ public class ProjectEditorServer {
                 "\n" +
                 ".tree-item.selected {\n" +
                 "    background: var(--accent-color);\n" +
+                "    color: white;\n" +
+                "}\n" +
+                "\n" +
+                ".tree-expand-icon {\n" +
+                "    margin-right: 4px;\n" +
+                "    width: 12px;\n" +
+                "    text-align: center;\n" +
+                "    cursor: pointer;\n" +
+                "    font-size: 10px;\n" +
+                "    color: var(--text-muted);\n" +
+                "    transition: transform 0.2s ease;\n" +
+                "}\n" +
+                "\n" +
+                ".tree-name {\n" +
+                "    white-space: nowrap;\n" +
+                "    overflow: hidden;\n" +
+                "    text-overflow: ellipsis;\n" +
+                "    flex: 1;\n" +
+                "    min-width: 0;\n" +
                 "}\n" +
                 "\n" +
                 ".tree-icon {\n" +
                 "    margin-right: 6px;\n" +
                 "    width: 16px;\n" +
                 "    text-align: center;\n" +
+                "    flex-shrink: 0;\n" +
                 "}\n" +
                 "\n" +
                 ".tree-children {\n" +
@@ -1034,6 +1182,24 @@ public class ProjectEditorServer {
                 "\n" +
                 ".tree-children.expanded {\n" +
                 "    display: block;\n" +
+                "}\n" +
+                "\n" +
+                ".file-tree::-webkit-scrollbar {\n" +
+                "    height: 8px;\n" +
+                "    width: 8px;\n" +
+                "}\n" +
+                "\n" +
+                ".file-tree::-webkit-scrollbar-track {\n" +
+                "    background: var(--bg-tertiary);\n" +
+                "}\n" +
+                "\n" +
+                ".file-tree::-webkit-scrollbar-thumb {\n" +
+                "    background: var(--border-color);\n" +
+                "    border-radius: 4px;\n" +
+                "}\n" +
+                "\n" +
+                ".file-tree::-webkit-scrollbar-thumb:hover {\n" +
+                "    background: var(--text-muted);\n" +
                 "}\n" +
                 "\n" +
                 ".editor-content {\n" +
