@@ -37,6 +37,8 @@ public class ProjectEditorServer {
             server.createContext("/api/file/delete", new FileDeleteHandler());
             server.createContext("/api/file/rename", new FileRenameHandler());
             server.createContext("/static/", new EditorStaticFileHandler());
+            server.createContext("/node-editor", new NodeEditorHandler());
+            server.createContext("/api/node/config", new NodeConfigHandler());
 
             server.setExecutor(null);
             server.start();
@@ -87,6 +89,74 @@ public class ProjectEditorServer {
                 os.write(response.getBytes());
                 os.close();
             }
+        }
+    }
+
+    static class NodeEditorHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                String response = NodeEditorFrontend.getNodeEditorPage();
+                exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+                exchange.sendResponseHeaders(200, response.getBytes().length);
+                OutputStream os = exchange.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            }
+        }
+    }
+
+    static class NodeConfigHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                try {
+                    JSONObject config = new JSONObject();
+                    JSONArray nodeTypes = new JSONArray();
+
+                    JSONObject printNode = new JSONObject();
+                    printNode.put("type", "NodePrintLog");
+                    printNode.put("name", "打印字符串");
+                    printNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("input", 0, "string", "输入内容", false)));
+                    printNode.put("outputs", new JSONArray());
+                    nodeTypes.put(printNode);
+
+                    JSONObject cycleNode = new JSONObject();
+                    cycleNode.put("type", "NodeLimitedCycle");
+                    cycleNode.put("name", "有限循环");
+                    cycleNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("initial_value", 0, "int", "初始值", false))
+                            .put(createParameterConfig("terminal_value", 1, "int", "终止值", false))
+                            .put(createParameterConfig("quitCondition", -1, "node", "退出条件", false)));
+                    cycleNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("current_value", 0, "int", "当前值", true))
+                            .put(createParameterConfig("cycleBodyHead", -1, "node", "循环体入口", true)));
+                    nodeTypes.put(cycleNode);
+
+                    JSONObject quitNode = new JSONObject();
+                    quitNode.put("type", "NodeQuitCycle");
+                    quitNode.put("name", "跳出循环");
+                    quitNode.put("inputs", new JSONArray());
+                    quitNode.put("outputs", new JSONArray());
+                    nodeTypes.put(quitNode);
+
+                    config.put("nodeTypes", nodeTypes);
+                    sendJsonResponse(exchange, config);
+                } catch (Exception e) {
+                    sendErrorResponse(exchange, "获取节点配置失败: " + e.getMessage());
+                }
+            }
+        }
+
+        private JSONObject createParameterConfig(String name, int index, String type, String description, boolean isOutput) {
+            JSONObject param = new JSONObject();
+            param.put("name", name);
+            param.put("index", index);
+            param.put("type", type);
+            param.put("description", description);
+            param.put("isOutput", isOutput);
+            return param;
         }
     }
 
@@ -426,13 +496,34 @@ public class ProjectEditorServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
-            if (path.equals("/static/editor-style.css")) {
-                String response = getEditorCSS();
-                exchange.getResponseHeaders().set("Content-Type", "text/css");
-                exchange.sendResponseHeaders(200, response.getBytes().length);
-                OutputStream os = exchange.getResponseBody();
-                os.write(response.getBytes());
-                os.close();
+            switch (path) {
+                case "/static/editor-style.css": {
+                    String response = getEditorCSS();
+                    exchange.getResponseHeaders().set("Content-Type", "text/css");
+                    exchange.sendResponseHeaders(200, response.getBytes().length);
+                    OutputStream os = exchange.getResponseBody();
+                    os.write(response.getBytes());
+                    os.close();
+                    break;
+                }
+                case "/static/node-editor.js": {
+                    String response = NodeEditorFrontend.getNodeEditorJS();
+                    exchange.getResponseHeaders().set("Content-Type", "application/javascript");
+                    exchange.sendResponseHeaders(200, response.getBytes().length);
+                    OutputStream os = exchange.getResponseBody();
+                    os.write(response.getBytes());
+                    os.close();
+                    break;
+                }
+                case "/static/node-editor.css": {
+                    String response = NodeEditorFrontend.getNodeEditorCSS();
+                    exchange.getResponseHeaders().set("Content-Type", "text/css");
+                    exchange.sendResponseHeaders(200, response.getBytes().length);
+                    OutputStream os = exchange.getResponseBody();
+                    os.write(response.getBytes());
+                    os.close();
+                    break;
+                }
             }
         }
     }
@@ -444,6 +535,14 @@ public class ProjectEditorServer {
 
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(400, response.toString().getBytes().length);
+        OutputStream os = exchange.getResponseBody();
+        os.write(response.toString().getBytes());
+        os.close();
+    }
+
+    private static void sendJsonResponse(HttpExchange exchange, JSONObject response) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(200, response.toString().getBytes().length);
         OutputStream os = exchange.getResponseBody();
         os.write(response.toString().getBytes());
         os.close();
@@ -760,28 +859,29 @@ public class ProjectEditorServer {
                 "        }\n" +
                 "\n" +
                 "        function openFile(filePath, fileType) {\n" +
-                "            if (fileType !== 'cyr') {\n" +
-                "                alert('目前只支持编辑 .cyr 文件');\n" +
-                "                return;\n" +
+                "            if (fileType === 'cyr') {\n" +
+                "                fetch('/api/file/content?path=' + encodeURIComponent(filePath))\n" +
+                "                    .then(response => response.json())\n" +
+                "                    .then(data => {\n" +
+                "                        currentFile = filePath;\n" +
+                "                        document.getElementById('current-file').textContent = filePath;\n" +
+                "                        document.getElementById('code-editor').value = data.content;\n" +
+                "                        \n" +
+                "                        document.getElementById('welcome-message').classList.add('hidden');\n" +
+                "                        document.getElementById('editor-area').classList.remove('hidden');\n" +
+                "                        \n" +
+                "                        markSaved();\n" +
+                "                        updateLineNumbers();\n" +
+                "                    })\n" +
+                "                    .catch(error => {\n" +
+                "                        console.error('打开文件失败:', error);\n" +
+                "                        alert('打开文件失败: ' + error.message);\n" +
+                "                    });\n" +
+                "            } else if (fileType === 'phn') {\n" +
+                "                window.open('/node-editor?file=' + encodeURIComponent(filePath), '_blank');\n" +
+                "            } else {\n" +
+                "                alert('目前只支持编辑 .cyr 和 .phn 文件');\n" +
                 "            }\n" +
-                "\n" +
-                "            fetch('/api/file/content?path=' + encodeURIComponent(filePath))\n" +
-                "                .then(response => response.json())\n" +
-                "                .then(data => {\n" +
-                "                    currentFile = filePath;\n" +
-                "                    document.getElementById('current-file').textContent = filePath;\n" +
-                "                    document.getElementById('code-editor').value = data.content;\n" +
-                "                    \n" +
-                "                    document.getElementById('welcome-message').classList.add('hidden');\n" +
-                "                    document.getElementById('editor-area').classList.remove('hidden');\n" +
-                "                    \n" +
-                "                    markSaved();\n" +
-                "                    updateLineNumbers();\n" +
-                "                })\n" +
-                "                .catch(error => {\n" +
-                "                    console.error('打开文件失败:', error);\n" +
-                "                    alert('打开文件失败: ' + error.message);\n" +
-                "                });\n" +
                 "        }\n" +
                 "\n" +
                 "        function markUnsaved() {\n" +
