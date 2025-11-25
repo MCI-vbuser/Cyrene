@@ -8,7 +8,7 @@ public class NodeEditorFrontend {
                 "<head>\n" +
                 "    <meta charset=\"UTF-8\">\n" +
                 "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-                "    <title>Cyrene Node Editor</title>\n" +
+                "    <title>Cyrene Editor - 节点图编辑器</title>\n" +
                 "    <link rel=\"stylesheet\" href=\"/static/node-editor.css\">\n" +
                 "</head>\n" +
                 "<body>\n" +
@@ -57,6 +57,7 @@ public class NodeEditorFrontend {
                 "        this.dragOffset = { x: 0, y: 0 };\n" +
                 "        this.connecting = false;\n" +
                 "        this.connectionSource = null;\n" +
+                "        this.tempConnection = null;\n" +
                 "        this.nodeConfigs = {};\n" +
                 "        \n" +
                 "        this.init();\n" +
@@ -76,6 +77,7 @@ public class NodeEditorFrontend {
                 "                acc[nodeType.type] = nodeType;\n" +
                 "                return acc;\n" +
                 "            }, {});\n" +
+                "            console.log('加载的节点配置:', this.nodeConfigs);\n" +
                 "        } catch (error) {\n" +
                 "            console.error('加载节点配置失败:', error);\n" +
                 "        }\n" +
@@ -85,7 +87,6 @@ public class NodeEditorFrontend {
                 "        const palette = document.getElementById('node-palette');\n" +
                 "        const canvas = document.getElementById('node-canvas');\n" +
                 "        \n" +
-                "        // 节点拖拽创建\n" +
                 "        palette.addEventListener('mousedown', (e) => {\n" +
                 "            if (e.target.closest('.node-item')) {\n" +
                 "                const item = e.target.closest('.node-item');\n" +
@@ -94,49 +95,53 @@ public class NodeEditorFrontend {
                 "            }\n" +
                 "        });\n" +
                 "        \n" +
-                "        // 画布事件\n" +
                 "        canvas.addEventListener('mousedown', this.handleCanvasMouseDown.bind(this));\n" +
                 "        canvas.addEventListener('mousemove', this.handleCanvasMouseMove.bind(this));\n" +
                 "        canvas.addEventListener('mouseup', this.handleCanvasMouseUp.bind(this));\n" +
                 "        canvas.addEventListener('dblclick', this.handleCanvasDoubleClick.bind(this));\n" +
                 "        \n" +
-                "        // 防止画布上的默认拖拽行为\n" +
                 "        canvas.addEventListener('dragstart', (e) => e.preventDefault());\n" +
+                "        \n" +
+                "        document.addEventListener('keydown', this.handleKeyDown.bind(this));\n" +
                 "    }\n" +
                 "    \n" +
                 "    createNode(type, x, y) {\n" +
                 "        const nodeId = Date.now();\n" +
                 "        const config = this.nodeConfigs[type];\n" +
                 "        \n" +
-                "        // 计算节点位置，确保在可见区域内\n" +
+                "        if (!config) {\n" +
+                "            console.error('未知节点类型:', type);\n" +
+                "            return;\n" +
+                "        }\n" +
+                "        \n" +
                 "        const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
-                "        const paletteWidth = 250; // 节点面板宽度\n" +
-                "        const nodeX = x - paletteWidth - 60; // 调整位置，避免被侧边栏遮挡\n" +
+                "        const paletteWidth = 250;\n" +
+                "        const nodeX = x - paletteWidth - 60;\n" +
                 "        const nodeY = y - 60;\n" +
                 "        \n" +
                 "        const node = {\n" +
                 "            id: nodeId,\n" +
                 "            type: type,\n" +
-                "            name: config ? config.name : type,\n" +
+                "            name: config.name,\n" +
                 "            position: { x: nodeX, y: nodeY },\n" +
                 "            properties: {}\n" +
                 "        };\n" +
                 "        \n" +
-                "        if (config) {\n" +
-                "            config.inputs.forEach(input => {\n" +
-                "                if (input.index >= 0) {\n" +
-                "                    node.properties[input.name] = {\n" +
-                "                        type: 'constant',\n" +
-                "                        value: this.getDefaultValue(input.type),\n" +
-                "                        dataType: input.type\n" +
-                "                    };\n" +
-                "                }\n" +
-                "            });\n" +
-                "        }\n" +
+                "        config.inputs.forEach(input => {\n" +
+                "            if (input.index >= 0) {\n" +
+                "                node.properties[input.name] = {\n" +
+                "                    type: 'constant',\n" +
+                "                    value: this.getDefaultValue(input.type),\n" +
+                "                    dataType: input.type\n" +
+                "                };\n" +
+                "            }\n" +
+                "        });\n" +
                 "        \n" +
                 "        this.nodes.push(node);\n" +
                 "        this.renderNode(node);\n" +
                 "        this.saveToFile();\n" +
+                "        \n" +
+                "        console.log('创建节点:', node);\n" +
                 "    }\n" +
                 "    \n" +
                 "    getDefaultValue(type) {\n" +
@@ -150,7 +155,10 @@ public class NodeEditorFrontend {
                 "    \n" +
                 "    renderNode(node) {\n" +
                 "        const config = this.nodeConfigs[node.type];\n" +
-                "        if (!config) return;\n" +
+                "        if (!config) {\n" +
+                "            console.error('无法渲染未知节点类型:', node.type);\n" +
+                "            return;\n" +
+                "        }\n" +
                 "        \n" +
                 "        const nodeEl = document.createElement('div');\n" +
                 "        nodeEl.className = 'node';\n" +
@@ -209,20 +217,17 @@ public class NodeEditorFrontend {
                 "        \n" +
                 "        if (!node) return;\n" +
                 "        \n" +
-                "        // 节点选择\n" +
                 "        nodeEl.addEventListener('mousedown', (e) => {\n" +
                 "            if (!e.target.classList.contains('port-dot')) {\n" +
                 "                e.preventDefault();\n" +
                 "                this.selectNode(nodeEl);\n" +
                 "                \n" +
-                "                // 开始拖拽\n" +
-                "                if (e.button === 0) { // 左键\n" +
+                "                if (e.button === 0) {\n" +
                 "                    this.startDragging(nodeEl, e);\n" +
                 "                }\n" +
                 "            }\n" +
                 "        });\n" +
                 "        \n" +
-                "        // 端口连接\n" +
                 "        const ports = nodeEl.querySelectorAll('.port');\n" +
                 "        ports.forEach(port => {\n" +
                 "            port.addEventListener('mousedown', (e) => {\n" +
@@ -236,7 +241,6 @@ public class NodeEditorFrontend {
                 "        this.dragging = true;\n" +
                 "        this.draggingNode = nodeEl;\n" +
                 "        \n" +
-                "        // 计算鼠标相对于节点左上角的偏移\n" +
                 "        const rect = nodeEl.getBoundingClientRect();\n" +
                 "        this.dragOffset = {\n" +
                 "            x: e.clientX - rect.left,\n" +
@@ -254,21 +258,20 @@ public class NodeEditorFrontend {
                 "        const canvas = document.getElementById('node-canvas');\n" +
                 "        const canvasRect = canvas.getBoundingClientRect();\n" +
                 "        \n" +
-                "        // 计算新位置\n" +
                 "        const newX = e.clientX - canvasRect.left - this.dragOffset.x;\n" +
                 "        const newY = e.clientY - canvasRect.top - this.dragOffset.y;\n" +
                 "        \n" +
-                "        // 更新节点位置\n" +
                 "        this.draggingNode.style.left = newX + 'px';\n" +
                 "        this.draggingNode.style.top = newY + 'px';\n" +
                 "        \n" +
-                "        // 更新节点数据\n" +
                 "        const nodeId = parseInt(this.draggingNode.dataset.nodeId);\n" +
                 "        const node = this.nodes.find(n => n.id === nodeId);\n" +
                 "        if (node) {\n" +
                 "            node.position.x = newX;\n" +
                 "            node.position.y = newY;\n" +
                 "        }\n" +
+                "        \n" +
+                "        this.updateConnections();\n" +
                 "    }\n" +
                 "    \n" +
                 "    handleDragEnd() {\n" +
@@ -282,7 +285,6 @@ public class NodeEditorFrontend {
                 "        document.removeEventListener('mousemove', this.handleDragMove.bind(this));\n" +
                 "        document.removeEventListener('mouseup', this.handleDragEnd.bind(this));\n" +
                 "        \n" +
-                "        // 保存位置变化\n" +
                 "        this.saveToFile();\n" +
                 "    }\n" +
                 "    \n" +
@@ -292,10 +294,184 @@ public class NodeEditorFrontend {
                 "            nodeId: parseInt(nodeEl.dataset.nodeId),\n" +
                 "            portName: portEl.dataset.portName,\n" +
                 "            portType: portEl.dataset.portType,\n" +
-                "            dataType: portEl.dataset.dataType\n" +
+                "            dataType: portEl.dataset.dataType,\n" +
+                "            element: portEl\n" +
                 "        };\n" +
                 "        \n" +
+                "        this.startTempConnection(portEl);\n" +
+                "        \n" +
                 "        console.log('开始连接:', this.connectionSource);\n" +
+                "    }\n" +
+                "    \n" +
+                "    startTempConnection(portEl) {\n" +
+                "        const portRect = portEl.getBoundingClientRect();\n" +
+                "        const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
+                "        \n" +
+                "        const startX = portRect.left + portRect.width / 2 - canvasRect.left;\n" +
+                "        const startY = portRect.top + portRect.height / 2 - canvasRect.top;\n" +
+                "        \n" +
+                "        this.tempConnection = {\n" +
+                "            startX: startX,\n" +
+                "            startY: startY,\n" +
+                "            endX: startX,\n" +
+                "            endY: startY\n" +
+                "        };\n" +
+                "        \n" +
+                "        this.drawTempConnection();\n" +
+                "    }\n" +
+                "    \n" +
+                "    drawTempConnection() {\n" +
+                "        const svg = document.getElementById('connection-layer');\n" +
+                "        \n" +
+                "        const oldTemp = svg.querySelector('.temp-connection');\n" +
+                "        if (oldTemp) {\n" +
+                "            oldTemp.remove();\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (this.tempConnection) {\n" +
+                "            const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');\n" +
+                "            line.classList.add('connection', 'temp-connection');\n" +
+                "            \n" +
+                "            const isLogic = this.connectionSource.dataType === 'node';\n" +
+                "            if (isLogic) {\n" +
+                "                line.classList.add('logic-connection');\n" +
+                "            } else {\n" +
+                "                line.classList.add('param-connection');\n" +
+                "            }\n" +
+                "            \n" +
+                "            const path = this.createBezierPath(\n" +
+                "                this.tempConnection.startX, \n" +
+                "                this.tempConnection.startY, \n" +
+                "                this.tempConnection.endX, \n" +
+                "                this.tempConnection.endY\n" +
+                "            );\n" +
+                "            \n" +
+                "            line.setAttribute('d', path);\n" +
+                "            svg.appendChild(line);\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    createBezierPath(startX, startY, endX, endY) {\n" +
+                "        const dx = endX - startX;\n" +
+                "        const controlOffset = Math.min(Math.abs(dx) * 0.5, 100);\n" +
+                "        \n" +
+                "        const cp1x = startX + controlOffset;\n" +
+                "        const cp1y = startY;\n" +
+                "        const cp2x = endX - controlOffset;\n" +
+                "        const cp2y = endY;\n" +
+                "        \n" +
+                "        return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;\n" +
+                "    }\n" +
+                "    \n" +
+                "    completeConnection(targetNodeEl, targetPortEl) {\n" +
+                "        if (!this.connectionSource) return;\n" +
+                "        \n" +
+                "        const source = this.connectionSource;\n" +
+                "        const target = {\n" +
+                "            nodeId: parseInt(targetNodeEl.dataset.nodeId),\n" +
+                "            portName: targetPortEl.dataset.portName,\n" +
+                "            portType: targetPortEl.dataset.portType,\n" +
+                "            dataType: targetPortEl.dataset.dataType\n" +
+                "        };\n" +
+                "        \n" +
+                "        if (this.isConnectionValid(source, target)) {\n" +
+                "            const connection = {\n" +
+                "                id: 'conn_' + Date.now(),\n" +
+                "                source: source,\n" +
+                "                target: target,\n" +
+                "                type: source.dataType === 'node' ? 'logic' : 'parameter'\n" +
+                "            };\n" +
+                "            \n" +
+                "            this.connections.push(connection);\n" +
+                "            \n" +
+                "            if (connection.type === 'parameter') {\n" +
+                "                this.updateNodePropertyConnection(target.nodeId, target.portName, source);\n" +
+                "            }\n" +
+                "            \n" +
+                "            this.saveToFile();\n" +
+                "            this.renderConnections();\n" +
+                "            \n" +
+                "            console.log('连接创建成功:', connection);\n" +
+                "        } else {\n" +
+                "            console.log('连接无效');\n" +
+                "        }\n" +
+                "        \n" +
+                "        this.cleanupConnection();\n" +
+                "    }\n" +
+                "    \n" +
+                "    isConnectionValid(source, target) {\n" +
+                "        if (source.nodeId === target.nodeId) {\n" +
+                "            alert('不能连接同一个节点');\n" +
+                "            return false;\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (source.portType === target.portType) {\n" +
+                "            alert('只能连接输出端口到输入端口');\n" +
+                "            return false;\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (source.dataType !== target.dataType) {\n" +
+                "            alert('数据类型不匹配');\n" +
+                "            return false;\n" +
+                "        }\n" +
+                "        \n" +
+                "        const existingConnection = this.connections.find(conn => \n" +
+                "            conn.source.nodeId === source.nodeId &&\n" +
+                "            conn.source.portName === source.portName &&\n" +
+                "            conn.target.nodeId === target.nodeId &&\n" +
+                "            conn.target.portName === target.portName\n" +
+                "        );\n" +
+                "        \n" +
+                "        if (existingConnection) {\n" +
+                "            alert('连接已存在');\n" +
+                "            return false;\n" +
+                "        }\n" +
+                "        \n" +
+                "        return true;\n" +
+                "    }\n" +
+                "    \n" +
+                "    updateNodePropertyConnection(nodeId, propertyName, source) {\n" +
+                "        const node = this.nodes.find(n => n.id === nodeId);\n" +
+                "        if (node && node.properties[propertyName]) {\n" +
+                "            node.properties[propertyName] = {\n" +
+                "                type: 'connection',\n" +
+                "                sourceNode: source.nodeId,\n" +
+                "                sourceOutput: source.portName,\n" +
+                "                dataType: source.dataType\n" +
+                "            };\n" +
+                "            \n" +
+                "            if (this.selectedNode && this.selectedNode.id === nodeId) {\n" +
+                "                this.showNodeProperties(this.selectedNode);\n" +
+                "            }\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    removeNodePropertyConnection(nodeId, propertyName) {\n" +
+                "        const node = this.nodes.find(n => n.id === nodeId);\n" +
+                "        if (node && node.properties[propertyName]) {\n" +
+                "            const dataType = node.properties[propertyName].dataType;\n" +
+                "            node.properties[propertyName] = {\n" +
+                "                type: 'constant',\n" +
+                "                value: this.getDefaultValue(dataType),\n" +
+                "                dataType: dataType\n" +
+                "            };\n" +
+                "            \n" +
+                "            if (this.selectedNode && this.selectedNode.id === nodeId) {\n" +
+                "                this.showNodeProperties(this.selectedNode);\n" +
+                "            }\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    cleanupConnection() {\n" +
+                "        this.connecting = false;\n" +
+                "        this.connectionSource = null;\n" +
+                "        this.tempConnection = null;\n" +
+                "        \n" +
+                "        const svg = document.getElementById('connection-layer');\n" +
+                "        const tempLine = svg.querySelector('.temp-connection');\n" +
+                "        if (tempLine) {\n" +
+                "            tempLine.remove();\n" +
+                "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    selectNode(nodeEl) {\n" +
@@ -303,9 +479,14 @@ public class NodeEditorFrontend {
                 "            node.classList.remove('selected');\n" +
                 "        });\n" +
                 "        \n" +
-                "        nodeEl.classList.add('selected');\n" +
-                "        this.selectedNode = this.nodes.find(node => node.id === parseInt(nodeEl.dataset.nodeId));\n" +
-                "        this.showNodeProperties(this.selectedNode);\n" +
+                "        if (nodeEl) {\n" +
+                "            nodeEl.classList.add('selected');\n" +
+                "            this.selectedNode = this.nodes.find(node => node.id === parseInt(nodeEl.dataset.nodeId));\n" +
+                "            this.showNodeProperties(this.selectedNode);\n" +
+                "        } else {\n" +
+                "            this.selectedNode = null;\n" +
+                "            this.showNodeProperties(null);\n" +
+                "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    showNodeProperties(node) {\n" +
@@ -316,6 +497,7 @@ public class NodeEditorFrontend {
                 "        }\n" +
                 "        \n" +
                 "        let html = `<h4>${node.name}</h4>`;\n" +
+                "        html += `<div style=\"font-size: 12px; color: #999; margin-bottom: 15px;\">ID: ${node.id}</div>`;\n" +
                 "        \n" +
                 "        Object.entries(node.properties).forEach(([key, prop]) => {\n" +
                 "            if (prop.type === 'constant') {\n" +
@@ -327,27 +509,116 @@ public class NodeEditorFrontend {
                 "                               onchange=\"editor.updateNodeProperty(${node.id}, '${key}', this.value)\">\n" +
                 "                    </div>\n" +
                 "                `;\n" +
-                "            } else {\n" +
+                "            } else if (prop.type === 'connection') {\n" +
                 "                html += `\n" +
                 "                    <div class=\"property-group\">\n" +
                 "                        <label>${key}</label>\n" +
-                "                        <div style=\"color: #ccc; font-size: 12px;\">\n" +
+                "                        <div style=\"color: #ccc; font-size: 12px; margin-bottom: 5px;\">\n" +
                 "                            连接到: 节点 ${prop.sourceNode} 的 ${prop.sourceOutput}\n" +
                 "                        </div>\n" +
+                "                        <button type=\"button\" class=\"disconnect-btn\" onclick=\"editor.disconnectProperty(${node.id}, '${key}')\">断开连接</button>\n" +
                 "                    </div>\n" +
                 "                `;\n" +
                 "            }\n" +
                 "        });\n" +
+                "        \n" +
+                "        html += `\n" +
+                "            <div class=\"property-group\" style=\"margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;\">\n" +
+                "                <button type=\"button\" class=\"delete-node-btn\" onclick=\"editor.deleteNode(${node.id})\">删除节点</button>\n" +
+                "            </div>\n" +
+                "        `;\n" +
                 "        \n" +
                 "        content.innerHTML = html;\n" +
                 "    }\n" +
                 "    \n" +
                 "    updateNodeProperty(nodeId, property, value) {\n" +
                 "        const node = this.nodes.find(n => n.id === nodeId);\n" +
-                "        if (node && node.properties[property]) {\n" +
+                "        if (node && node.properties[property] && node.properties[property].type === 'constant') {\n" +
                 "            node.properties[property].value = value;\n" +
                 "            this.saveToFile();\n" +
                 "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    disconnectProperty(nodeId, propertyName) {\n" +
+                "        this.connections = this.connections.filter(conn => \n" +
+                "            !(conn.target.nodeId === nodeId && conn.target.portName === propertyName)\n" +
+                "        );\n" +
+                "        \n" +
+                "        this.removeNodePropertyConnection(nodeId, propertyName);\n" +
+                "        \n" +
+                "        this.saveToFile();\n" +
+                "        this.renderConnections();\n" +
+                "    }\n" +
+                "    \n" +
+                "    deleteNode(nodeId) {\n" +
+                "        if (confirm('确定要删除这个节点吗？')) {\n" +
+                "            this.nodes = this.nodes.filter(n => n.id !== nodeId);\n" +
+                "            \n" +
+                "            this.connections = this.connections.filter(conn => \n" +
+                "                conn.source.nodeId !== nodeId && conn.target.nodeId !== nodeId\n" +
+                "            );\n" +
+                "            \n" +
+                "            const nodeEl = document.querySelector(`[data-node-id=\"${nodeId}\"]`);\n" +
+                "            if (nodeEl) {\n" +
+                "                nodeEl.remove();\n" +
+                "            }\n" +
+                "            \n" +
+                "            this.selectNode(null);\n" +
+                "            \n" +
+                "            this.saveToFile();\n" +
+                "            this.renderConnections();\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    renderConnections() {\n" +
+                "        const svg = document.getElementById('connection-layer');\n" +
+                "        \n" +
+                "        const connections = svg.querySelectorAll('.connection:not(.temp-connection)');\n" +
+                "        connections.forEach(conn => conn.remove());\n" +
+                "        \n" +
+                "        this.connections.forEach(conn => {\n" +
+                "            this.drawConnection(conn);\n" +
+                "        });\n" +
+                "    }\n" +
+                "    \n" +
+                "    drawConnection(connection) {\n" +
+                "        const sourceNodeEl = document.querySelector(`[data-node-id=\"${connection.source.nodeId}\"]`);\n" +
+                "        const targetNodeEl = document.querySelector(`[data-node-id=\"${connection.target.nodeId}\"]`);\n" +
+                "        \n" +
+                "        if (!sourceNodeEl || !targetNodeEl) return;\n" +
+                "        \n" +
+                "        const sourcePortEl = sourceNodeEl.querySelector(`[data-port-name=\"${connection.source.portName}\"]`);\n" +
+                "        const targetPortEl = targetNodeEl.querySelector(`[data-port-name=\"${connection.target.portName}\"]`);\n" +
+                "        \n" +
+                "        if (!sourcePortEl || !targetPortEl) return;\n" +
+                "        \n" +
+                "        const sourceRect = sourcePortEl.getBoundingClientRect();\n" +
+                "        const targetRect = targetPortEl.getBoundingClientRect();\n" +
+                "        const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
+                "        \n" +
+                "        const startX = sourceRect.left + sourceRect.width / 2 - canvasRect.left;\n" +
+                "        const startY = sourceRect.top + sourceRect.height / 2 - canvasRect.top;\n" +
+                "        const endX = targetRect.left + targetRect.width / 2 - canvasRect.left;\n" +
+                "        const endY = targetRect.top + targetRect.height / 2 - canvasRect.top;\n" +
+                "        \n" +
+                "        const svg = document.getElementById('connection-layer');\n" +
+                "        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');\n" +
+                "        \n" +
+                "        path.classList.add('connection');\n" +
+                "        if (connection.type === 'logic') {\n" +
+                "            path.classList.add('logic-connection');\n" +
+                "        } else {\n" +
+                "            path.classList.add('param-connection');\n" +
+                "        }\n" +
+                "        \n" +
+                "        const pathData = this.createBezierPath(startX, startY, endX, endY);\n" +
+                "        path.setAttribute('d', pathData);\n" +
+                "        \n" +
+                "        svg.appendChild(path);\n" +
+                "    }\n" +
+                "    \n" +
+                "    updateConnections() {\n" +
+                "        this.renderConnections();\n" +
                 "    }\n" +
                 "    \n" +
                 "    saveToFile() {\n" +
@@ -355,7 +626,14 @@ public class NodeEditorFrontend {
                 "            version: \"1.0\",\n" +
                 "            name: \"节点图\",\n" +
                 "            nodes: this.nodes,\n" +
-                "            connections: this.connections\n" +
+                "            connections: this.connections.map(conn => ({\n" +
+                "                id: conn.id,\n" +
+                "                type: conn.type,\n" +
+                "                sourceNode: conn.source.nodeId,\n" +
+                "                sourcePort: conn.source.portName,\n" +
+                "                targetNode: conn.target.nodeId,\n" +
+                "                targetPort: conn.target.portName\n" +
+                "            }))\n" +
                 "        };\n" +
                 "        \n" +
                 "        if (window.currentPhnFile) {\n" +
@@ -381,8 +659,36 @@ public class NodeEditorFrontend {
                 "                    if (data.content) {\n" +
                 "                        const graphData = JSON.parse(data.content);\n" +
                 "                        this.nodes = graphData.nodes || [];\n" +
-                "                        this.connections = graphData.connections || [];\n" +
+                "                        \n" +
+                "                        this.connections = (graphData.connections || []).map(conn => ({\n" +
+                "                            id: conn.id,\n" +
+                "                            type: conn.type,\n" +
+                "                            source: {\n" +
+                "                                nodeId: conn.sourceNode,\n" +
+                "                                portName: conn.sourcePort,\n" +
+                "                                portType: 'output',\n" +
+                "                                dataType: conn.type === 'logic' ? 'node' : 'int'\n" +
+                "                            },\n" +
+                "                            target: {\n" +
+                "                                nodeId: conn.targetNode,\n" +
+                "                                portName: conn.targetPort,\n" +
+                "                                portType: 'input',\n" +
+                "                                dataType: conn.type === 'logic' ? 'node' : 'int'\n" +
+                "                            }\n" +
+                "                        }));\n" +
+                "                        \n" +
+                "                        this.connections.forEach(conn => {\n" +
+                "                            if (conn.type === 'parameter') {\n" +
+                "                                this.updateNodePropertyConnection(\n" +
+                "                                    conn.target.nodeId, \n" +
+                "                                    conn.target.portName, \n" +
+                "                                    conn.source\n" +
+                "                                );\n" +
+                "                            }\n" +
+                "                        });\n" +
+                "                        \n" +
                 "                        this.renderAllNodes();\n" +
+                "                        this.renderConnections();\n" +
                 "                    }\n" +
                 "                });\n" +
                 "        }\n" +
@@ -393,29 +699,50 @@ public class NodeEditorFrontend {
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasMouseDown(e) {\n" +
-                "        // 点击空白处取消选择\n" +
                 "        if (e.target === document.getElementById('node-canvas')) {\n" +
                 "            this.selectNode(null);\n" +
                 "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasMouseMove(e) {\n" +
-                "        // 处理拖拽移动（在handleDragMove中处理）\n" +
+                "        \n" +
+                "        if (this.connecting && this.tempConnection) {\n" +
+                "            const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
+                "            this.tempConnection.endX = e.clientX - canvasRect.left;\n" +
+                "            this.tempConnection.endY = e.clientY - canvasRect.top;\n" +
+                "            this.drawTempConnection();\n" +
+                "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasMouseUp(e) {\n" +
-                "        // 处理连接完成\n" +
                 "        if (this.connecting && this.connectionSource) {\n" +
-                "            // 这里可以添加连接目标的逻辑\n" +
-                "            this.connecting = false;\n" +
-                "            this.connectionSource = null;\n" +
+                "            const targetPort = e.target.closest('.port');\n" +
+                "            if (targetPort) {\n" +
+                "                const targetNode = targetPort.closest('.node');\n" +
+                "                if (targetNode) {\n" +
+                "                    this.completeConnection(targetNode, targetPort);\n" +
+                "                } else {\n" +
+                "                    this.cleanupConnection();\n" +
+                "                }\n" +
+                "            } else {\n" +
+                "                this.cleanupConnection();\n" +
+                "            }\n" +
                 "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasDoubleClick(e) {\n" +
-                "        // 双击画布创建默认节点\n" +
                 "        if (e.target === document.getElementById('node-canvas')) {\n" +
                 "            this.createNode('NodePrintLog', e.clientX, e.clientY);\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    handleKeyDown(e) {\n" +
+                "        if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedNode) {\n" +
+                "            this.deleteNode(this.selectedNode.id);\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (e.key === 'Escape' && this.connecting) {\n" +
+                "            this.cleanupConnection();\n" +
                 "        }\n" +
                 "    }\n" +
                 "}\n" +
@@ -424,8 +751,7 @@ public class NodeEditorFrontend {
     }
 
     public static String getNodeEditorCSS() {
-        return "/* 重置样式 */\n" +
-                "* {\n" +
+        return "* {\n" +
                 "    margin: 0;\n" +
                 "    padding: 0;\n" +
                 "    box-sizing: border-box;\n" +
@@ -446,6 +772,7 @@ public class NodeEditorFrontend {
                 "    --accent-color: #4e7ab5;\n" +
                 "    --logic-color: #d19a66;\n" +
                 "    --param-color: #499c54;\n" +
+                "    --error-color: #e06c75;\n" +
                 "}\n" +
                 "        \n" +
                 ".node-editor-container {\n" +
@@ -562,6 +889,10 @@ public class NodeEditorFrontend {
                 ".port:hover {\n" +
                 "    background: rgba(255, 255, 255, 0.1);\n" +
                 "}\n" +
+                "\n" +
+                ".port.connected {\n" +
+                "    background: rgba(78, 122, 181, 0.2);\n" +
+                "}\n" +
                 "        \n" +
                 ".input-port {\n" +
                 "    flex-direction: row;\n" +
@@ -606,6 +937,17 @@ public class NodeEditorFrontend {
                 "    stroke: var(--param-color);\n" +
                 "    stroke-dasharray: 5,5;\n" +
                 "}\n" +
+                "\n" +
+                ".temp-connection {\n" +
+                "    stroke-dasharray: 5,5;\n" +
+                "    animation: dash 1s linear infinite;\n" +
+                "}\n" +
+                "\n" +
+                "@keyframes dash {\n" +
+                "    to {\n" +
+                "        stroke-dashoffset: -10;\n" +
+                "    }\n" +
+                "}\n" +
                 "        \n" +
                 ".property-panel {\n" +
                 "    width: 300px;\n" +
@@ -649,7 +991,27 @@ public class NodeEditorFrontend {
                 "    border-color: var(--accent-color);\n" +
                 "}\n" +
                 "\n" +
-                "/* 滚动条样式 */\n" +
+                ".property-group input:disabled {\n" +
+                "    opacity: 0.6;\n" +
+                "    cursor: not-allowed;\n" +
+                "}\n" +
+                "\n" +
+                ".disconnect-btn, .delete-node-btn {\n" +
+                "    width: 100%;\n" +
+                "    padding: 8px 12px;\n" +
+                "    background: var(--error-color);\n" +
+                "    border: none;\n" +
+                "    border-radius: 4px;\n" +
+                "    color: white;\n" +
+                "    font-size: 14px;\n" +
+                "    cursor: pointer;\n" +
+                "    transition: background-color 0.2s ease;\n" +
+                "}\n" +
+                "\n" +
+                ".disconnect-btn:hover, .delete-node-btn:hover {\n" +
+                "    background: #c85566;\n" +
+                "}\n" +
+                "\n" +
                 ".node-palette::-webkit-scrollbar,\n" +
                 ".property-panel::-webkit-scrollbar {\n" +
                 "    width: 6px;\n" +
