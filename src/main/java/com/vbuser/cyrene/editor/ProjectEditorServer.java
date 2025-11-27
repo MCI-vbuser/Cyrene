@@ -113,7 +113,10 @@ public class ProjectEditorServer {
                 try {
                     JSONObject config = new JSONObject();
                     JSONArray nodeTypes = new JSONArray();
-
+                    // 1 服务器节点
+                    // 1.1 执行节点
+                    // 1.1.1 通用节点
+                    // 打印字符串
                     JSONObject printNode = new JSONObject();
                     printNode.put("type", "NodePrintLog");
                     printNode.put("name", "打印字符串");
@@ -123,7 +126,18 @@ public class ProjectEditorServer {
                     printNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(printNode);
-
+                    // 设置局部变量
+                    JSONObject varSetterNode = new JSONObject();
+                    varSetterNode.put("type", "NodeSetLocalVariable");
+                    varSetterNode.put("name", "设置局部变量");
+                    varSetterNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("variable_name", 0, "variable", "局部变量", false))
+                            .put(createParameterConfig("value", 0, "auto", "值", false)));
+                    varSetterNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(varSetterNode);
+                    // 有限循环
                     JSONObject cycleNode = new JSONObject();
                     cycleNode.put("type", "NodeLimitedCycle");
                     cycleNode.put("name", "有限循环");
@@ -137,7 +151,7 @@ public class ProjectEditorServer {
                             .put(createParameterConfig("cycleBodyHead", -1, "node", "循环体入口", true))
                             .put(createParameterConfig("current_value", 0, "int", "当前值", true)));
                     nodeTypes.put(cycleNode);
-
+                    // 跳出循环
                     JSONObject quitNode = new JSONObject();
                     quitNode.put("type", "NodeQuitCycle");
                     quitNode.put("name", "跳出循环");
@@ -146,6 +160,76 @@ public class ProjectEditorServer {
                     quitNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(quitNode);
+                    // 转发事件
+                    JSONObject forwardNode = new JSONObject();
+                    forwardNode.put("type", "NodeForwardEvent");
+                    forwardNode.put("name", "转发事件");
+                    forwardNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("event", 0, "entity", "目标实体", false)));
+                    forwardNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(forwardNode);
+                    // 1.1.2 列表相关
+                    // 对列表插入值
+                    JSONObject insertNode = new JSONObject();
+                    insertNode.put("type", "NodeInsertValue");
+                    insertNode.put("name", "对列表插入值");
+                    insertNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("list", 0, "list", "列表", false))
+                            .put(createParameterConfig("index", 0, "int", "序号", false))
+                            .put(createParameterConfig("value", 0, "auto", "值", false)));
+                    insertNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(insertNode);
+                    // 对列表修改值
+                    JSONObject modifyNode = new JSONObject();
+                    modifyNode.put("type", "NodeModifyValue");
+                    modifyNode.put("name", "对列表修改值");
+                    modifyNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("list", 0, "list", "列表", false))
+                            .put(createParameterConfig("index", 0, "int", "序号", false))
+                            .put(createParameterConfig("value", 0, "auto", "值", false)));
+                    modifyNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(modifyNode);
+                    // 对列表移除值
+                    JSONObject removeNode = new JSONObject();
+                    removeNode.put("type", "NodeRemoveValue");
+                    removeNode.put("name", "对列表移除值");
+                    removeNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("list", 0, "list", "列表", false))
+                            .put(createParameterConfig("index", 0, "int", "序号", false)));
+                    removeNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(removeNode);
+                    // 对列表迭代循环
+                    JSONObject cycleListNode = new JSONObject();
+                    cycleListNode.put("type", "NodeCycleList");
+                    cycleListNode.put("name", "对列表迭代循环");
+                    cycleListNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("quitCycle",-1,"node", "跳出循环", false))
+                            .put(createParameterConfig("list", 0, "list", "迭代列表", false)));
+                    cycleListNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("cycleBody",-1,"node","循环体",true))
+                            .put(createParameterConfig("downstream", -1, "node", "循环完成", true))
+                            .put(createParameterConfig("currentValue", 0, "auto", "当前值", true)));
+                    nodeTypes.put(cycleListNode);
+                    // 列表排序
+                    JSONObject sortNode = new JSONObject();
+                    sortNode.put("type", "NodeSortList");
+                    sortNode.put("name", "列表排序");
+                    sortNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("list", 0, "list", "列表", false))
+                            .put(createParameterConfig("order",0,"enum","排序方式",false)));
+                    sortNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(sortNode);
 
                     config.put("nodeTypes", nodeTypes);
                     sendJsonResponse(exchange, config);

@@ -17,15 +17,43 @@ public class NodeEditorFrontend {
                 "            <h3>节点库</h3>\n" +
                 "            <div class=\"node-item\" data-type=\"NodePrintLog\">\n" +
                 "                <div>打印字符串</div>\n" +
-                "                <div style=\"font-size: 12px; color: #ccc;\">输出文本到控制台</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">可以在日志中输出一条字符串，一般用于逻辑检测和调试</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetLocalVariable\">\n" +
+                "                <div>设置局部变量</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">与查询节点【查询局部变量的值】连接后可以覆盖该局部变量的值</div>\n" +
                 "            </div>\n" +
                 "            <div class=\"node-item\" data-type=\"NodeLimitedCycle\">\n" +
                 "                <div>有限循环</div>\n" +
-                "                <div style=\"font-size: 12px; color: #ccc;\">指定范围的循环</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">从【循环开始值】开始到【循环结束值】结束，会遍历其中的循环值，每次整数加一。每次循环会执行一次【循环体】后连接的节点逻辑。完成一次完整遍历后，会执行【循环完成】节点后连接的逻辑</div>\n" +
                 "            </div>\n" +
                 "            <div class=\"node-item\" data-type=\"NodeQuitCycle\">\n" +
                 "                <div>跳出循环</div>\n" +
-                "                <div style=\"font-size: 12px; color: #ccc;\">提前终止循环</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">从有限循环中跳出。出引脚需要与节点【有限循环】的【跳出循环】入参相连</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeForwardEvent\">\n" +
+                "                <div>转发事件</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">向指定目标实体转发此节点所在的执行流的源头事件。被转发的目标实体上的节点图上的同名事件会被触发</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeInsertValue\">\n" +
+                "                <div>对列表插入值</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">向指定列表的指定序号插入值。被插入的值插入后会出现在列表的插入序号的位置</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeModifyValue\">\n" +
+                "                <div>对列表修改值</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">修改指定列表的指定序号位置的值</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeRemoveValue\">\n" +
+                "                <div>对列表移除值</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">移除指定列表的指定序号位置的值</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeCycleList\">\n" +
+                "                <div>对列表迭代循环</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">按照列表顺序遍历循环指定列表</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSortList\">\n" +
+                "                <div>列表排序</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">将指定列表按照排序方式进行排序</div>\n" +
                 "            </div>\n" +
                 "        </div>\n" +
                 "        \n" +
