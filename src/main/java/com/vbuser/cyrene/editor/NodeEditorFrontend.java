@@ -88,6 +88,20 @@ public class NodeEditorFrontend {
                 "        this.tempConnection = null;\n" +
                 "        this.nodeConfigs = {};\n" +
                 "        \n" +
+                "        this.typeCompatibility = {\n" +
+                "            'int': ['int', 'num', 'string'],\n" +
+                "            'float': ['float', 'num', 'string'],\n" +
+                "            'num': ['int', 'float', 'num', 'string'],\n" +
+                "            'string': ['string'],\n" +
+                "            'boolean': ['boolean', 'string'],\n" +
+                "            'list': ['list', 'string'],\n" +
+                "            'entity': ['entity', 'string'],\n" +
+                "            'variable': ['variable', 'string'],\n" +
+                "            'enum': ['enum', 'string'],\n" +
+                "            'auto': ['int', 'float', 'num', 'string', 'boolean', 'list', 'entity', 'variable', 'enum', 'auto'],\n" +
+                "            'node': ['node']\n" +
+                "        };\n" +
+                "        \n" +
                 "        this.init();\n" +
                 "    }\n" +
                 "    \n" +
@@ -105,7 +119,6 @@ public class NodeEditorFrontend {
                 "                acc[nodeType.type] = nodeType;\n" +
                 "                return acc;\n" +
                 "            }, {});\n" +
-                "            console.log('加载的节点配置:', this.nodeConfigs);\n" +
                 "        } catch (error) {\n" +
                 "            console.error('加载节点配置失败:', error);\n" +
                 "        }\n" +
@@ -142,10 +155,11 @@ public class NodeEditorFrontend {
                 "            return;\n" +
                 "        }\n" +
                 "        \n" +
-                "        const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
-                "        const paletteWidth = 250;\n" +
-                "        const nodeX = x - paletteWidth - 60;\n" +
-                "        const nodeY = y - 60;\n" +
+                "        const canvas = document.getElementById('node-canvas');\n" +
+                "        const canvasRect = canvas.getBoundingClientRect();\n" +
+                "        \n" +
+                "        const nodeX = (canvasRect.width - 180) / 2;\n" +
+                "        const nodeY = (canvasRect.height - 100) / 2;\n" +
                 "        \n" +
                 "        const node = {\n" +
                 "            id: nodeId,\n" +
@@ -168,13 +182,13 @@ public class NodeEditorFrontend {
                 "        this.nodes.push(node);\n" +
                 "        this.renderNode(node);\n" +
                 "        this.saveToFile();\n" +
-                "        \n" +
-                "        console.log('创建节点:', node);\n" +
                 "    }\n" +
                 "    \n" +
                 "    getDefaultValue(type) {\n" +
                 "        switch(type) {\n" +
                 "            case 'int': return 0;\n" +
+                "            case 'float': return 0.0;\n" +
+                "            case 'num': return 0;\n" +
                 "            case 'string': return '';\n" +
                 "            case 'boolean': return false;\n" +
                 "            default: return '';\n" +
@@ -327,8 +341,6 @@ public class NodeEditorFrontend {
                 "        };\n" +
                 "        \n" +
                 "        this.startTempConnection(portEl);\n" +
-                "        \n" +
-                "        console.log('开始连接:', this.connectionSource);\n" +
                 "    }\n" +
                 "    \n" +
                 "    startTempConnection(portEl) {\n" +
@@ -418,8 +430,6 @@ public class NodeEditorFrontend {
                 "            \n" +
                 "            this.saveToFile();\n" +
                 "            this.renderConnections();\n" +
-                "            \n" +
-                "            console.log('连接创建成功:', connection);\n" +
                 "        } else {\n" +
                 "            console.log('连接无效');\n" +
                 "        }\n" +
@@ -438,8 +448,8 @@ public class NodeEditorFrontend {
                 "            return false;\n" +
                 "        }\n" +
                 "        \n" +
-                "        if (source.dataType !== target.dataType) {\n" +
-                "            alert('数据类型不匹配');\n" +
+                "        if (!this.isTypeCompatible(source.dataType, target.dataType)) {\n" +
+                "            alert(`数据类型不匹配: ${source.dataType} 不能连接到 ${target.dataType}`);\n" +
                 "            return false;\n" +
                 "        }\n" +
                 "        \n" +
@@ -456,6 +466,31 @@ public class NodeEditorFrontend {
                 "        }\n" +
                 "        \n" +
                 "        return true;\n" +
+                "    }\n" +
+                "    \n" +
+                "    isTypeCompatible(sourceType, targetType) {\n" +
+                "        if (sourceType === targetType) {\n" +
+                "            return true;\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (sourceType === 'node' || targetType === 'node') {\n" +
+                "            return sourceType === targetType;\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (targetType === 'string') {\n" +
+                "            return true;\n" +
+                "        }\n" +
+                "        \n" +
+                "        const compatibleTypes = this.typeCompatibility[sourceType];\n" +
+                "        if (compatibleTypes && compatibleTypes.includes(targetType)) {\n" +
+                "            return true;\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (targetType === 'auto') {\n" +
+                "            return true;\n" +
+                "        }\n" +
+                "        \n" +
+                "        return false;\n" +
                 "    }\n" +
                 "    \n" +
                 "    updateNodePropertyConnection(nodeId, propertyName, source) {\n" +
@@ -525,40 +560,52 @@ public class NodeEditorFrontend {
                 "        }\n" +
                 "        \n" +
                 "        let html = `<h4>${node.name}</h4>`;\n" +
-                "        html += `<div style=\"font-size: 12px; color: #999; margin-bottom: 15px;\">ID: ${node.id}</div>`;\n" +
+                "        html += `<div style=\\\"font-size: 12px; color: #999; margin-bottom: 15px;\\\">ID: ${node.id}</div>`;\n" +
                 "        \n" +
                 "        Object.entries(node.properties).forEach(([key, prop]) => {\n" +
                 "            if (prop.type === 'constant') {\n" +
-                "                html += `\n" +
-                "                    <div class=\"property-group\">\n" +
-                "                        <label>${key}</label>\n" +
-                "                        <input type=\"text\" \n" +
-                "                               value=\"${prop.value}\" \n" +
-                "                               onchange=\"editor.updateNodeProperty(${node.id}, '${key}', this.value)\">\n" +
-                "                    </div>\n" +
-                "                `;\n" +
+                "                const allowedInputTypes = ['int', 'float', 'num', 'string'];\n" +
+                "                if (allowedInputTypes.includes(prop.dataType)) {\n" +
+                "                    html += `\n" +
+                "                        <div class=\\\"property-group\\\">\n" +
+                "                            <label>${key}</label>\n" +
+                "                            <input type=\\\"text\\\" \n" +
+                "                                   value=\\\"${prop.value}\\\" \n" +
+                "                                   onchange=\\\"editor.updateNodeProperty(${node.id}, '${key}', this.value)\\\">\n" +
+                "                        </div>\n" +
+                "                    `;\n" +
+                "                } else {\n" +
+                "                    html += `\n" +
+                "                        <div class=\\\"property-group\\\">\n" +
+                "                            <label>${key}</label>\n" +
+                "                            <div style=\\\"color: #ccc; font-size: 12px; margin-bottom: 5px;\\\">\n" +
+                "                                等待连接... <br>\n" +
+                "                                (类型: ${prop.dataType})\n" +
+                "                            </div>\n" +
+                "                        </div>\n" +
+                "                    `;\n" +
+                "                }\n" +
                 "            } else if (prop.type === 'connection') {\n" +
                 "                html += `\n" +
-                "                    <div class=\"property-group\">\n" +
+                "                    <div class=\\\"property-group\\\">\n" +
                 "                        <label>${key}</label>\n" +
-                "                        <div style=\"color: #ccc; font-size: 12px; margin-bottom: 5px;\">\n" +
-                "                            连接到: 节点 ${prop.sourceNode} 的 ${prop.sourceOutput}\n" +
+                "                        <div style=\\\"color: #ccc; font-size: 12px; margin-bottom: 5px;\\\">\n" +
+                "                            连接到: <br>节点 ${prop.sourceNode} 的 <br>${prop.sourceOutput} 参数<br> <br> \n" +
                 "                        </div>\n" +
-                "                        <button type=\"button\" class=\"disconnect-btn\" onclick=\"editor.disconnectProperty(${node.id}, '${key}')\">断开连接</button>\n" +
+                "                        <button type=\\\"button\\\" class=\\\"disconnect-btn\\\" onclick=\\\"editor.disconnectProperty(${node.id}, '${key}')\\\">断开连接</button>\n" +
                 "                    </div>\n" +
                 "                `;\n" +
                 "            }\n" +
                 "        });\n" +
                 "        \n" +
                 "        html += `\n" +
-                "            <div class=\"property-group\" style=\"margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;\">\n" +
-                "                <button type=\"button\" class=\"delete-node-btn\" onclick=\"editor.deleteNode(${node.id})\">删除节点</button>\n" +
+                "            <div class=\\\"property-group\\\" style=\\\"margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;\\\">\n" +
+                "                <button type=\\\"button\\\" class=\\\"delete-node-btn\\\" onclick=\\\"editor.deleteNode(${node.id})\\\">删除节点</button>\n" +
                 "            </div>\n" +
                 "        `;\n" +
                 "        \n" +
                 "        content.innerHTML = html;\n" +
                 "    }\n" +
-                "    \n" +
                 "    updateNodeProperty(nodeId, property, value) {\n" +
                 "        const node = this.nodes.find(n => n.id === nodeId);\n" +
                 "        if (node && node.properties[property] && node.properties[property].type === 'constant') {\n" +
@@ -733,7 +780,6 @@ public class NodeEditorFrontend {
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasMouseMove(e) {\n" +
-                "        \n" +
                 "        if (this.connecting && this.tempConnection) {\n" +
                 "            const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
                 "            this.tempConnection.endX = e.clientX - canvasRect.left;\n" +
