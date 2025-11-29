@@ -178,8 +178,8 @@ public class ProjectEditorServer {
                     insertNode.put("inputs", new JSONArray()
                             .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
                             .put(createParameterConfig("list", 0, "list", "列表", false))
-                            .put(createParameterConfig("index", 0, "int", "序号", false))
-                            .put(createParameterConfig("value", 0, "auto", "值", false)));
+                            .put(createParameterConfig("index", 1, "int", "序号", false))
+                            .put(createParameterConfig("value", 2, "auto", "值", false)));
                     insertNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(insertNode);
@@ -190,8 +190,8 @@ public class ProjectEditorServer {
                     modifyNode.put("inputs", new JSONArray()
                             .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
                             .put(createParameterConfig("list", 0, "list", "列表", false))
-                            .put(createParameterConfig("index", 0, "int", "序号", false))
-                            .put(createParameterConfig("value", 0, "auto", "值", false)));
+                            .put(createParameterConfig("index", 1, "int", "序号", false))
+                            .put(createParameterConfig("value", 2, "auto", "值", false)));
                     modifyNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(modifyNode);
@@ -202,7 +202,7 @@ public class ProjectEditorServer {
                     removeNode.put("inputs", new JSONArray()
                             .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
                             .put(createParameterConfig("list", 0, "list", "列表", false))
-                            .put(createParameterConfig("index", 0, "int", "序号", false)));
+                            .put(createParameterConfig("index", 1, "int", "序号", false)));
                     removeNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(removeNode);
@@ -226,10 +226,57 @@ public class ProjectEditorServer {
                     sortNode.put("inputs", new JSONArray()
                             .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
                             .put(createParameterConfig("list", 0, "list", "列表", false))
-                            .put(createParameterConfig("order",0,"enum","排序方式",false)));
+                            .put(createParameterConfig("order",1,"enum","排序方式",false)));
                     sortNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(sortNode);
+                    // 拼接列表
+                    JSONObject concatNode = new JSONObject();
+                    concatNode.put("type", "NodeConcatList");
+                    concatNode.put("name", "拼接列表");
+                    concatNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("list1", 0, "list", "目标列表", false))
+                            .put(createParameterConfig("list2", 1, "list", "接入的列表", false)));
+                    concatNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(concatNode);
+                    // 清除列表
+                    JSONObject clearNode = new JSONObject();
+                    clearNode.put("type", "NodeClearList");
+                    clearNode.put("name", "清除列表");
+                    clearNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("list", 0, "list", "列表", false)));
+                    clearNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(clearNode);
+                    // 1.1.3 自定义变量
+                    // 设置节点图变量
+                    JSONObject setDiagramVariableNode = new JSONObject();
+                    setDiagramVariableNode.put("type", "NodeSetDiagramVariable");
+                    setDiagramVariableNode.put("name", "设置节点图变量");
+                    setDiagramVariableNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("variable", 0, "string", "变量名", false))
+                            .put(createParameterConfig("value", 1, "auto", "变量值", false))
+                            .put(createParameterConfig("trigger",2,"boolean","触发事件",false)));
+                    setDiagramVariableNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(setDiagramVariableNode);
+                    // 设置自定义变量
+                    JSONObject setVariableNode = new JSONObject();
+                    setVariableNode.put("type", "NodeSetVariable");
+                    setVariableNode.put("name", "设置自定义变量");
+                    setVariableNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("target", 0, "entity", "变量名", false))
+                            .put(createParameterConfig("variable", 1, "string", "变量名", false))
+                            .put(createParameterConfig("value", 2, "auto", "变量值", false))
+                            .put(createParameterConfig("trigger",3,"boolean","触发事件",false)));
+                    setVariableNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(setVariableNode);
 
                     config.put("nodeTypes", nodeTypes);
                     sendJsonResponse(exchange, config);

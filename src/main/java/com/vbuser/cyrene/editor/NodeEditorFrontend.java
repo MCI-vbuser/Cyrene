@@ -55,6 +55,22 @@ public class NodeEditorFrontend {
                 "                <div>列表排序</div>\n" +
                 "                <div style=\"font-size: 12px; color: #ccc;\">将指定列表按照排序方式进行排序</div>\n" +
                 "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeConcatList\">\n" +
+                "                <div>列表拼接</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">将接入列表拼接在目标列表后</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeClearList\">\n" +
+                "                <div>清除列表</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">清空指定列表</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetVariable\">\n" +
+                "                <div>设置自定义变量</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">为目标实体上的指定变量设置值</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetDiagramVariable\">\n" +
+                "                <div>设置节点图变量</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">为当前节点图内指定节点图变量设置值</div>\n" +
+                "            </div>\n" +
                 "        </div>\n" +
                 "        \n" +
                 "        <div class=\"node-canvas\" id=\"node-canvas\">\n" +
