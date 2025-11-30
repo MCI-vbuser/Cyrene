@@ -71,6 +71,90 @@ public class NodeEditorFrontend {
                 "                <div>设置节点图变量</div>\n" +
                 "                <div style=\"font-size: 12px; color: #ccc;\">为当前节点图内指定节点图变量设置值</div>\n" +
                 "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetPresetState\">\n" +
+                "                <div>设置预设状态</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">设置指定目标实体的预设状态</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeCreateEntity\">\n" +
+                "                <div>创建实体</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">根据GUID创建实体</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeCreateComponent\">\n" +
+                "                <div>创建元件</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">根据元件ID创建一个实体</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeCreateComponentGroup\">\n" +
+                "                <div>创建元件组</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">根据元件组索引创建该元件组内包含的实体</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeToggleModel\">\n" +
+                "                <div>激活/关闭模型显示</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">更改实体的模型可见性属性设置</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeDestroyEntity\">\n" +
+                "                <div>销毁实体</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">销毁指定实体，会有销毁表现</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeRemoveEntity\">\n" +
+                "                <div>移除实体</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">移除指定实体，不会有销毁表现</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeFinishMission\">\n" +
+                "                <div>结算关卡</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">触发关卡结算流程</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetEnvironmentTime\">\n" +
+                "                <div>设置当前环境时间</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">立即切换环境时间到指定小时</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetEnvironmentTimeScale\">\n" +
+                "                <div>设置环境时间流逝速度</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">每秒流逝分钟数（提瓦特速度为1）</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeChangeEntityCamp\">\n" +
+                "                <div>修改实体阵营</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">修改指定目标实体的阵营</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeTeleportPlayer\">\n" +
+                "                <div>传送玩家</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">传送指定玩家实体</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeReviveCharacter\">\n" +
+                "                <div>复苏角色</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">复苏指定的角色实体</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeKnockdownAllCharacters\">\n" +
+                "                <div>击倒玩家所有角色</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">击倒指定玩家的所有角色</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeReviveAllCharacters\">\n" +
+                "                <div>复苏玩家所有角色</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">复苏指定玩家所有角色实体</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeActivateRevivePoint\">\n" +
+                "                <div>激活复苏点</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">为该玩家激活指定序号的复苏点</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetReviveTime\">\n" +
+                "                <div>设置玩家复苏耗时</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">设置指定玩家的下一次复苏时长</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeSetReviveCount\">\n" +
+                "                <div>设置玩家剩余复苏次数</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">设置指定玩家剩余复苏次数</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeModifyEnvironment\">\n" +
+                "                <div>修改环境配置</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">使指定玩家应用指定的环境配置</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeAllowRevive\">\n" +
+                "                <div>允许/禁止玩家复苏</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">设置指定玩家是否允许复苏</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeDeactivateRevivePoint\">\n" +
+                "                <div>注销复活点</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">为该玩家注销指定序号的复活点</div>\n" +
+                "            </div>\n" +
                 "        </div>\n" +
                 "        \n" +
                 "        <div class=\"node-canvas\" id=\"node-canvas\">\n" +
@@ -580,7 +664,7 @@ public class NodeEditorFrontend {
                 "        \n" +
                 "        Object.entries(node.properties).forEach(([key, prop]) => {\n" +
                 "            if (prop.type === 'constant') {\n" +
-                "                const allowedInputTypes = ['int', 'float', 'num', 'string'];\n" +
+                "                const allowedInputTypes = ['int', 'float', 'num', 'string', 'enum', 'boolean'];\n" +
                 "                if (allowedInputTypes.includes(prop.dataType)) {\n" +
                 "                    html += `\n" +
                 "                        <div class=\\\"property-group\\\">\n" +

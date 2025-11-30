@@ -277,6 +277,250 @@ public class ProjectEditorServer {
                     setVariableNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(setVariableNode);
+                    // 1.1.4 预设状态
+                    // 设置预设状态
+                    JSONObject setPresetStateNode = new JSONObject();
+                    setPresetStateNode.put("type", "NodeSetPresetState");
+                    setPresetStateNode.put("name", "设置预设状态");
+                    setPresetStateNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("preset", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("trigger",1,"int","预设状态索引",false))
+                            .put(createParameterConfig("trigger",2,"boolean","预设状态值",false)));
+                    setPresetStateNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(setPresetStateNode);
+                    // 1.1.5 实体相关
+                    // 创建实体
+                    JSONObject createEntityNode = new JSONObject();
+                    createEntityNode.put("type", "NodeCreateEntity");
+                    createEntityNode.put("name", "创建实体");
+                    createEntityNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("guid", 0, "guid", "目标GUID", false))
+                            .put(createParameterConfig("index",1,"list","单位标签索引列表",false)));
+                    createEntityNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(createEntityNode);
+                    // 创建元件
+                    JSONObject createComponentNode = new JSONObject();
+                    createComponentNode.put("type", "NodeCreateComponent");
+                    createComponentNode.put("name", "创建元件");
+                    createComponentNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("id", 0, "id", "原件ID", false))
+                            .put(createParameterConfig("position", 1, "vec3d", "位置", false))
+                            .put(createParameterConfig("rotation",2,"vec3d","旋转",false))
+                            .put(createParameterConfig("owner",3,"entity","拥有者实体",false))
+                            .put(createParameterConfig("override",4,"boolean","是否覆写等级",false))
+                            .put(createParameterConfig("level",5,"int","等级",false))
+                            .put(createParameterConfig("index",6,"list","单位标签索引列表",false)));
+                    createComponentNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true))
+                            .put(createParameterConfig("component", 0, "entity", "创建后实体", true)));
+                    nodeTypes.put(createComponentNode);
+                    // 创建元件组
+                    JSONObject createComponentGroupNode = new JSONObject();
+                    createComponentGroupNode.put("type", "NodeCreateComponentGroup");
+                    createComponentGroupNode.put("name", "创建元件组");
+                    createComponentGroupNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("id", 0, "int", "元件组索引", false))
+                            .put(createParameterConfig("position", 1, "vec3d", "位置", false))
+                            .put(createParameterConfig("rotation",2,"vec3d","旋转",false))
+                            .put(createParameterConfig("owner",3,"entity","拥有者实体",false))
+                            .put(createParameterConfig("override",4,"boolean","是否覆写等级",false))
+                            .put(createParameterConfig("level",5,"int","等级",false))
+                            .put(createParameterConfig("index",6,"list","单位标签索引列表",false)));
+                    createComponentGroupNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true))
+                            .put(createParameterConfig("component", 0, "list", "创建后实体列表", true)));
+                    nodeTypes.put(createComponentGroupNode);
+                    // 激活/关闭模型显示
+                    JSONObject toggleModelNode = new JSONObject();
+                    toggleModelNode.put("type", "NodeToggleModel");
+                    toggleModelNode.put("name", "激活/关闭模型显示");
+                    toggleModelNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("entity", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("show", 1, "boolean", "是否激活", false)));
+                    toggleModelNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(toggleModelNode);
+                    // 销毁实体
+                    JSONObject destroyEntityNode = new JSONObject();
+                    destroyEntityNode.put("type", "NodeDestroyEntity");
+                    destroyEntityNode.put("name", "销毁实体");
+                    destroyEntityNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("entity", 0, "entity", "目标实体", false)));
+                    destroyEntityNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(destroyEntityNode);
+                    // 移除实体
+                    JSONObject removeEntityNode = new JSONObject();
+                    removeEntityNode.put("type", "NodeRemoveEntity");
+                    removeEntityNode.put("name", "移除实体");
+                    removeEntityNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("entity", 0, "entity", "目标实体", false)));
+                    removeEntityNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(removeEntityNode);
+                    // 1.1.6 关卡相关
+                    // 结算关卡
+                    JSONObject finishMissionNode = new JSONObject();
+                    finishMissionNode.put("type", "NodeFinishMission");
+                    finishMissionNode.put("name", "结算关卡");
+                    finishMissionNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false)));
+                    finishMissionNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(finishMissionNode);
+                    // 设置当前环境时间
+                    JSONObject setEnvironmentTimeNode = new JSONObject();
+                    setEnvironmentTimeNode.put("type", "NodeSetEnvironmentTime");
+                    setEnvironmentTimeNode.put("name", "设置当前环境时间");
+                    setEnvironmentTimeNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("time", 0, "float", "环境时间", false)));
+                    setEnvironmentTimeNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(setEnvironmentTimeNode);
+                    // 设置环境时间流逝速度
+                    JSONObject setEnvironmentTimeScaleNode = new JSONObject();
+                    setEnvironmentTimeScaleNode.put("type", "NodeSetEnvironmentTimeScale");
+                    setEnvironmentTimeScaleNode.put("name", "设置环境时间流逝速度");
+                    setEnvironmentTimeScaleNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("scale", 0, "float", "环境时间流逝速度", false)));
+                    setEnvironmentTimeScaleNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(setEnvironmentTimeScaleNode);
+                    // 1.1.7 阵营相关
+                    // 修改实体阵营
+                    JSONObject changeEntityCampNode = new JSONObject();
+                    changeEntityCampNode.put("type", "NodeChangeEntityCamp");
+                    changeEntityCampNode.put("name", "修改实体阵营");
+                    changeEntityCampNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("entity", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("camp", 1, "team", "阵营", false)));
+                    changeEntityCampNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(changeEntityCampNode);
+                    // 1.1.8 玩家与角色相关
+                    // 传送玩家
+                    JSONObject teleportPlayerNode = new JSONObject();
+                    teleportPlayerNode.put("type", "NodeTeleportPlayer");
+                    teleportPlayerNode.put("name", "传送玩家");
+                    teleportPlayerNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "玩家实体", false))
+                            .put(createParameterConfig("position", 1, "vector3", "目标位置", false))
+                            .put(createParameterConfig("rotation", 2, "vector3", "目标旋转", false)));
+                    teleportPlayerNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(teleportPlayerNode);
+                    // 复苏角色
+                    JSONObject reviveCharacterNode = new JSONObject();
+                    reviveCharacterNode.put("type", "NodeReviveCharacter");
+                    reviveCharacterNode.put("name", "复苏角色");
+                    reviveCharacterNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("character", 0, "entity", "角色实体", false)));
+                    reviveCharacterNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(reviveCharacterNode);
+                    // 击倒玩家所有角色
+                    JSONObject knockdownAllCharactersNode = new JSONObject();
+                    knockdownAllCharactersNode.put("type", "NodeKnockdownAllCharacters");
+                    knockdownAllCharactersNode.put("name", "击倒玩家所有角色");
+                    knockdownAllCharactersNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "玩家实体", false)));
+                    knockdownAllCharactersNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(knockdownAllCharactersNode);
+                    // 复苏玩家所有角色
+                    JSONObject reviveAllCharactersNode = new JSONObject();
+                    reviveAllCharactersNode.put("type", "NodeReviveAllCharacters");
+                    reviveAllCharactersNode.put("name", "复苏玩家所有角色");
+                    reviveAllCharactersNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "玩家实体", false))
+                            .put(createParameterConfig("cost", 1, "boolean", "是否扣除复苏次数", false)));
+                    reviveAllCharactersNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(reviveAllCharactersNode);
+                    // 激活复苏点
+                    JSONObject activateRevivePointNode = new JSONObject();
+                    activateRevivePointNode.put("type", "NodeActivateRevivePoint");
+                    activateRevivePointNode.put("name", "激活复苏点");
+                    activateRevivePointNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("revivePoint", 0, "entity", "玩家实体", false))
+                            .put(createParameterConfig("cost", 1, "int", "复苏点序号", false)));
+                    activateRevivePointNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(activateRevivePointNode);
+                    // 设置玩家复苏耗时
+                    JSONObject setReviveTimeNode = new JSONObject();
+                    setReviveTimeNode.put("type", "NodeSetReviveTime");
+                    setReviveTimeNode.put("name", "设置玩家复苏耗时");
+                    setReviveTimeNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "玩家实体", false))
+                            .put(createParameterConfig("time", 1, "int", "时长", false)));
+                    setReviveTimeNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(setReviveTimeNode);
+                    // 设置玩家剩余复苏次数
+                    JSONObject setReviveCountNode = new JSONObject();
+                    setReviveCountNode.put("type", "NodeSetReviveCount");
+                    setReviveCountNode.put("name", "设置玩家剩余复苏次数");
+                    setReviveCountNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "玩家实体", false))
+                            .put(createParameterConfig("count", 1, "int", "剩余次数", false)));
+                    setReviveCountNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(setReviveCountNode);
+                    // 修改环境配置
+                    JSONObject modifyEnvironmentNode = new JSONObject();
+                    modifyEnvironmentNode.put("type", "NodeModifyEnvironment");
+                    modifyEnvironmentNode.put("name", "修改环境配置");
+                    modifyEnvironmentNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("index", 0, "int", "环境配置索引", false))
+                            .put(createParameterConfig("players", 1, "list", "目标玩家列表", false))
+                            .put(createParameterConfig("weather", 2, "boolean", "是否启用天气配置", false))
+                            .put(createParameterConfig("w_index", 3, "int", "天气配置序号", false)));
+                    modifyEnvironmentNode.put("outputs", new JSONArray()
+                    .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(modifyEnvironmentNode);
+                    // 允许/禁止玩家复苏
+                    JSONObject allowReviveNode = new JSONObject();
+                    allowReviveNode.put("type", "NodeAllowRevive");
+                    allowReviveNode.put("name", "允许/禁止玩家复苏");
+                    allowReviveNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "玩家实体", false))
+                            .put(createParameterConfig("allow", 1, "boolean", "是否允许", false)));
+                    allowReviveNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(allowReviveNode);
+                    // 注销复活点
+                    JSONObject deactivateRevivePointNode = new JSONObject();
+                    deactivateRevivePointNode.put("type", "NodeDeactivateRevivePoint");
+                    deactivateRevivePointNode.put("name", "注销复活点");
+                    deactivateRevivePointNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "玩家实体", false))
+                            .put(createParameterConfig("point", 1, "int", "复活点序号", false)));
+                    deactivateRevivePointNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(deactivateRevivePointNode);
 
                     config.put("nodeTypes", nodeTypes);
                     sendJsonResponse(exchange, config);
