@@ -158,7 +158,13 @@ public class NodeEditorFrontend {
                 "        </div>\n" +
                 "        \n" +
                 "        <div class=\"node-canvas\" id=\"node-canvas\">\n" +
-                "            <svg id=\"connection-layer\" style=\"position: absolute; width: 100%; height: 100%; pointer-events: none;\"></svg>\n" +
+                "            <div class=\"transform-container\" id=\"transform-container\">\n" +
+                "                <svg id=\"connection-layer\" style=\"width: 100%; height: 100%; pointer-events: none;\"></svg>\n" +
+                "            </div>\n" +
+                "            <div class=\"view-info\">\n" +
+                "                <span id=\"zoom-info\">100%</span>\n" +
+                "                <span id=\"position-info\">x: 0, y: 0</span>\n" +
+                "            </div>\n" +
                 "        </div>\n" +
                 "        \n" +
                 "        <div class=\"property-panel\" id=\"property-panel\">\n" +
@@ -188,6 +194,17 @@ public class NodeEditorFrontend {
                 "        this.tempConnection = null;\n" +
                 "        this.nodeConfigs = {};\n" +
                 "        \n" +
+                "        // 画布变换相关\n" +
+                "        this.transform = {\n" +
+                "            x: 0,\n" +
+                "            y: 0,\n" +
+                "            scale: 1\n" +
+                "        };\n" +
+                "        this.isPanning = false;\n" +
+                "        this.lastPanPoint = { x: 0, y: 0 };\n" +
+                "        this.minScale = 0.1;\n" +
+                "        this.maxScale = 5;\n" +
+                "        \n" +
                 "        this.typeCompatibility = {\n" +
                 "            'int': ['int', 'num', 'string'],\n" +
                 "            'float': ['float', 'num', 'string'],\n" +
@@ -209,6 +226,7 @@ public class NodeEditorFrontend {
                 "        await this.loadNodeConfigs();\n" +
                 "        this.setupEventListeners();\n" +
                 "        this.loadFromFile();\n" +
+                "        this.updateViewInfo();\n" +
                 "    }\n" +
                 "    \n" +
                 "    async loadNodeConfigs() {\n" +
@@ -227,6 +245,7 @@ public class NodeEditorFrontend {
                 "    setupEventListeners() {\n" +
                 "        const palette = document.getElementById('node-palette');\n" +
                 "        const canvas = document.getElementById('node-canvas');\n" +
+                "        const transformContainer = document.getElementById('transform-container');\n" +
                 "        \n" +
                 "        palette.addEventListener('mousedown', (e) => {\n" +
                 "            if (e.target.closest('.node-item')) {\n" +
@@ -236,14 +255,195 @@ public class NodeEditorFrontend {
                 "            }\n" +
                 "        });\n" +
                 "        \n" +
+                "        // 画布事件监听\n" +
+                "        canvas.addEventListener('wheel', this.handleCanvasWheel.bind(this));\n" +
                 "        canvas.addEventListener('mousedown', this.handleCanvasMouseDown.bind(this));\n" +
                 "        canvas.addEventListener('mousemove', this.handleCanvasMouseMove.bind(this));\n" +
                 "        canvas.addEventListener('mouseup', this.handleCanvasMouseUp.bind(this));\n" +
                 "        canvas.addEventListener('dblclick', this.handleCanvasDoubleClick.bind(this));\n" +
                 "        \n" +
+                "        // 防止拖拽触发选择文本\n" +
                 "        canvas.addEventListener('dragstart', (e) => e.preventDefault());\n" +
                 "        \n" +
+                "        // 防止右键菜单\n" +
+                "        canvas.addEventListener('contextmenu', (e) => e.preventDefault());\n" +
+                "        \n" +
                 "        document.addEventListener('keydown', this.handleKeyDown.bind(this));\n" +
+                "        \n" +
+                "        // 初始应用变换\n" +
+                "        this.updateTransform();\n" +
+                "    }\n" +
+                "    \n" +
+                "    // 画布变换相关方法\n" +
+                "    updateTransform() {\n" +
+                "        const container = document.getElementById('transform-container');\n" +
+                "        container.style.transform = `translate(${this.transform.x}px, ${this.transform.y}px) scale(${this.transform.scale})`;\n" +
+                "        container.style.transformOrigin = '0 0';\n" +
+                "        this.updateViewInfo();\n" +
+                "    }\n" +
+                "    \n" +
+                "    updateViewInfo() {\n" +
+                "        document.getElementById('zoom-info').textContent = `${Math.round(this.transform.scale * 100)}%`;\n" +
+                "        document.getElementById('position-info').textContent = `x: ${Math.round(this.transform.x)}, y: ${Math.round(this.transform.y)}`;\n" +
+                "    }\n" +
+                "    \n" +
+                "    resetView() {\n" +
+                "        this.transform = {\n" +
+                "            x: 0,\n" +
+                "            y: 0,\n" +
+                "            scale: 1\n" +
+                "        };\n" +
+                "        this.updateTransform();\n" +
+                "    }\n" +
+                "    \n" +
+                "    handleCanvasWheel(e) {\n" +
+                "        e.preventDefault();\n" +
+                "        \n" +
+                "        const canvas = document.getElementById('node-canvas');\n" +
+                "        const rect = canvas.getBoundingClientRect();\n" +
+                "        \n" +
+                "        // 鼠标相对于画布的坐标\n" +
+                "        const mouseX = e.clientX - rect.left;\n" +
+                "        const mouseY = e.clientY - rect.top;\n" +
+                "        \n" +
+                "        // 缩放前的鼠标在变换空间中的坐标\n" +
+                "        const worldX = (mouseX - this.transform.x) / this.transform.scale;\n" +
+                "        const worldY = (mouseY - this.transform.y) / this.transform.scale;\n" +
+                "        \n" +
+                "        // 计算缩放\n" +
+                "        const delta = e.deltaY > 0 ? 0.9 : 1.1;\n" +
+                "        const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.transform.scale * delta));\n" +
+                "        \n" +
+                "        // 调整位移，使鼠标下的点保持在同一位置\n" +
+                "        this.transform.x = mouseX - worldX * newScale;\n" +
+                "        this.transform.y = mouseY - worldY * newScale;\n" +
+                "        this.transform.scale = newScale;\n" +
+                "        \n" +
+                "        this.updateTransform();\n" +
+                "    }\n" +
+                "    \n" +
+                "    handleCanvasMouseDown(e) {\n" +
+                "        // 中键按下：开始平移\n" +
+                "        if (e.button === 1) {\n" +
+                "            e.preventDefault();\n" +
+                "            this.isPanning = true;\n" +
+                "            this.lastPanPoint = { x: e.clientX, y: e.clientY };\n" +
+                "            document.getElementById('node-canvas').style.cursor = 'grabbing';\n" +
+                "            return;\n" +
+                "        }\n" +
+                "        \n" +
+                "        // 左键按下：检查是否点击了节点或连接点\n" +
+                "        if (e.button === 0) {\n" +
+                "            const node = e.target.closest('.node');\n" +
+                "            if (node) {\n" +
+                "                if (!e.target.classList.contains('port-dot')) {\n" +
+                "                    e.preventDefault();\n" +
+                "                    this.selectNode(node);\n" +
+                "                    \n" +
+                "                    // 开始拖拽节点\n" +
+                "                    this.startDragging(node, e);\n" +
+                "                }\n" +
+                "            } else {\n" +
+                "                // 点击画布空白处，取消选择\n" +
+                "                this.selectNode(null);\n" +
+                "            }\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    handleCanvasMouseMove(e) {\n" +
+                "        // 处理画布平移\n" +
+                "        if (this.isPanning) {\n" +
+                "            const deltaX = e.clientX - this.lastPanPoint.x;\n" +
+                "            const deltaY = e.clientY - this.lastPanPoint.y;\n" +
+                "            \n" +
+                "            this.transform.x += deltaX;\n" +
+                "            this.transform.y += deltaY;\n" +
+                "            \n" +
+                "            this.lastPanPoint = { x: e.clientX, y: e.clientY };\n" +
+                "            this.updateTransform();\n" +
+                "            return;\n" +
+                "        }\n" +
+                "        \n" +
+                "        // 处理临时连接线\n" +
+                "        if (this.connecting && this.tempConnection) {\n" +
+                "            const canvas = document.getElementById('node-canvas');\n" +
+                "            const rect = canvas.getBoundingClientRect();\n" +
+                "            const mouseX = e.clientX - rect.left;\n" +
+                "            const mouseY = e.clientY - rect.top;\n" +
+                "            \n" +
+                "            // 将屏幕坐标转换为变换空间坐标\n" +
+                "            const worldX = (mouseX - this.transform.x) / this.transform.scale;\n" +
+                "            const worldY = (mouseY - this.transform.y) / this.transform.scale;\n" +
+                "            \n" +
+                "            this.tempConnection.endX = worldX;\n" +
+                "            this.tempConnection.endY = worldY;\n" +
+                "            this.drawTempConnection();\n" +
+                "        }\n" +
+                "        \n" +
+                "        // 处理节点拖拽\n" +
+                "        if (this.dragging && this.draggingNode) {\n" +
+                "            const canvas = document.getElementById('node-canvas');\n" +
+                "            const rect = canvas.getBoundingClientRect();\n" +
+                "            \n" +
+                "            // 将屏幕坐标转换为变换空间坐标\n" +
+                "            const worldX = (e.clientX - rect.left - this.dragOffset.x - this.transform.x) / this.transform.scale;\n" +
+                "            const worldY = (e.clientY - rect.top - this.dragOffset.y - this.transform.y) / this.transform.scale;\n" +
+                "            \n" +
+                "            this.draggingNode.style.left = worldX + 'px';\n" +
+                "            this.draggingNode.style.top = worldY + 'px';\n" +
+                "            \n" +
+                "            const nodeId = parseInt(this.draggingNode.dataset.nodeId);\n" +
+                "            const node = this.nodes.find(n => n.id === nodeId);\n" +
+                "            if (node) {\n" +
+                "                node.position.x = worldX;\n" +
+                "                node.position.y = worldY;\n" +
+                "            }\n" +
+                "            \n" +
+                "            this.updateConnections();\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    handleCanvasMouseUp(e) {\n" +
+                "        // 结束画布平移\n" +
+                "        if (e.button === 1 && this.isPanning) {\n" +
+                "            this.isPanning = false;\n" +
+                "            document.getElementById('node-canvas').style.cursor = 'default';\n" +
+                "            this.saveToFile();\n" +
+                "            return;\n" +
+                "        }\n" +
+                "        \n" +
+                "        // 处理连接完成\n" +
+                "        if (this.connecting && this.connectionSource && e.button === 0) {\n" +
+                "            const targetPort = e.target.closest('.port');\n" +
+                "            if (targetPort) {\n" +
+                "                const targetNode = targetPort.closest('.node');\n" +
+                "                if (targetNode) {\n" +
+                "                    this.completeConnection(targetNode, targetPort);\n" +
+                "                } else {\n" +
+                "                    this.cleanupConnection();\n" +
+                "                }\n" +
+                "            } else {\n" +
+                "                this.cleanupConnection();\n" +
+                "            }\n" +
+                "        }\n" +
+                "        \n" +
+                "        // 结束节点拖拽\n" +
+                "        if (e.button === 0 && this.dragging) {\n" +
+                "            this.handleDragEnd();\n" +
+                "        }\n" +
+                "    }\n" +
+                "    \n" +
+                "    handleCanvasDoubleClick(e) {\n" +
+                "        if (e.target.id === 'node-canvas' || e.target.id === 'transform-container') {\n" +
+                "            const canvas = document.getElementById('node-canvas');\n" +
+                "            const rect = canvas.getBoundingClientRect();\n" +
+                "            \n" +
+                "            // 将屏幕坐标转换为变换空间坐标\n" +
+                "            const worldX = (e.clientX - rect.left - this.transform.x) / this.transform.scale;\n" +
+                "            const worldY = (e.clientY - rect.top - this.transform.y) / this.transform.scale;\n" +
+                "            \n" +
+                "            this.createNode('NodePrintLog', worldX, worldY);\n" +
+                "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    createNode(type, x, y) {\n" +
@@ -255,11 +455,21 @@ public class NodeEditorFrontend {
                 "            return;\n" +
                 "        }\n" +
                 "        \n" +
-                "        const canvas = document.getElementById('node-canvas');\n" +
-                "        const canvasRect = canvas.getBoundingClientRect();\n" +
+                "        // 如果未提供坐标，则创建在视口中心\n" +
+                "        let nodeX = x;\n" +
+                "        let nodeY = y;\n" +
                 "        \n" +
-                "        const nodeX = (canvasRect.width - 180) / 2;\n" +
-                "        const nodeY = (canvasRect.height - 100) / 2;\n" +
+                "        if (nodeX === undefined || nodeY === undefined) {\n" +
+                "            const canvas = document.getElementById('node-canvas');\n" +
+                "            const canvasRect = canvas.getBoundingClientRect();\n" +
+                "            \n" +
+                "            // 将画布中心转换为变换空间坐标\n" +
+                "            const centerX = canvasRect.width / 2;\n" +
+                "            const centerY = canvasRect.height / 2;\n" +
+                "            \n" +
+                "            nodeX = (centerX - this.transform.x) / this.transform.scale - 90; // 减去节点宽度的一半\n" +
+                "            nodeY = (centerY - this.transform.y) / this.transform.scale - 50; // 减去节点高度的一半\n" +
+                "        }\n" +
                 "        \n" +
                 "        const node = {\n" +
                 "            id: nodeId,\n" +
@@ -349,7 +559,7 @@ public class NodeEditorFrontend {
                 "            </div>\n" +
                 "        `;\n" +
                 "        \n" +
-                "        document.getElementById('node-canvas').appendChild(nodeEl);\n" +
+                "        document.getElementById('transform-container').appendChild(nodeEl);\n" +
                 "        this.setupNodeEvents(nodeEl);\n" +
                 "    }\n" +
                 "    \n" +
@@ -358,17 +568,6 @@ public class NodeEditorFrontend {
                 "        const node = this.nodes.find(n => n.id === nodeId);\n" +
                 "        \n" +
                 "        if (!node) return;\n" +
-                "        \n" +
-                "        nodeEl.addEventListener('mousedown', (e) => {\n" +
-                "            if (!e.target.classList.contains('port-dot')) {\n" +
-                "                e.preventDefault();\n" +
-                "                this.selectNode(nodeEl);\n" +
-                "                \n" +
-                "                if (e.button === 0) {\n" +
-                "                    this.startDragging(nodeEl, e);\n" +
-                "                }\n" +
-                "            }\n" +
-                "        });\n" +
                 "        \n" +
                 "        const ports = nodeEl.querySelectorAll('.port');\n" +
                 "        ports.forEach(port => {\n" +
@@ -390,30 +589,6 @@ public class NodeEditorFrontend {
                 "        };\n" +
                 "        \n" +
                 "        nodeEl.style.cursor = 'grabbing';\n" +
-                "        document.addEventListener('mousemove', this.handleDragMove.bind(this));\n" +
-                "        document.addEventListener('mouseup', this.handleDragEnd.bind(this));\n" +
-                "    }\n" +
-                "    \n" +
-                "    handleDragMove(e) {\n" +
-                "        if (!this.dragging || !this.draggingNode) return;\n" +
-                "        \n" +
-                "        const canvas = document.getElementById('node-canvas');\n" +
-                "        const canvasRect = canvas.getBoundingClientRect();\n" +
-                "        \n" +
-                "        const newX = e.clientX - canvasRect.left - this.dragOffset.x;\n" +
-                "        const newY = e.clientY - canvasRect.top - this.dragOffset.y;\n" +
-                "        \n" +
-                "        this.draggingNode.style.left = newX + 'px';\n" +
-                "        this.draggingNode.style.top = newY + 'px';\n" +
-                "        \n" +
-                "        const nodeId = parseInt(this.draggingNode.dataset.nodeId);\n" +
-                "        const node = this.nodes.find(n => n.id === nodeId);\n" +
-                "        if (node) {\n" +
-                "            node.position.x = newX;\n" +
-                "            node.position.y = newY;\n" +
-                "        }\n" +
-                "        \n" +
-                "        this.updateConnections();\n" +
                 "    }\n" +
                 "    \n" +
                 "    handleDragEnd() {\n" +
@@ -423,9 +598,6 @@ public class NodeEditorFrontend {
                 "        \n" +
                 "        this.dragging = false;\n" +
                 "        this.draggingNode = null;\n" +
-                "        \n" +
-                "        document.removeEventListener('mousemove', this.handleDragMove.bind(this));\n" +
-                "        document.removeEventListener('mouseup', this.handleDragEnd.bind(this));\n" +
                 "        \n" +
                 "        this.saveToFile();\n" +
                 "    }\n" +
@@ -445,10 +617,12 @@ public class NodeEditorFrontend {
                 "    \n" +
                 "    startTempConnection(portEl) {\n" +
                 "        const portRect = portEl.getBoundingClientRect();\n" +
-                "        const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
+                "        const canvas = document.getElementById('node-canvas');\n" +
+                "        const canvasRect = canvas.getBoundingClientRect();\n" +
                 "        \n" +
-                "        const startX = portRect.left + portRect.width / 2 - canvasRect.left;\n" +
-                "        const startY = portRect.top + portRect.height / 2 - canvasRect.top;\n" +
+                "        // 将屏幕坐标转换为变换空间坐标\n" +
+                "        const startX = (portRect.left + portRect.width / 2 - canvasRect.left - this.transform.x) / this.transform.scale;\n" +
+                "        const startY = (portRect.top + portRect.height / 2 - canvasRect.top - this.transform.y) / this.transform.scale;\n" +
                 "        \n" +
                 "        this.tempConnection = {\n" +
                 "            startX: startX,\n" +
@@ -660,25 +834,25 @@ public class NodeEditorFrontend {
                 "        }\n" +
                 "        \n" +
                 "        let html = `<h4>${node.name}</h4>`;\n" +
-                "        html += `<div style=\\\"font-size: 12px; color: #999; margin-bottom: 15px;\\\">ID: ${node.id}</div>`;\n" +
+                "        html += `<div style=\"font-size: 12px; color: #999; margin-bottom: 15px;\">ID: ${node.id}</div>`;\n" +
                 "        \n" +
                 "        Object.entries(node.properties).forEach(([key, prop]) => {\n" +
                 "            if (prop.type === 'constant') {\n" +
                 "                const allowedInputTypes = ['int', 'float', 'num', 'string', 'enum', 'boolean'];\n" +
                 "                if (allowedInputTypes.includes(prop.dataType)) {\n" +
                 "                    html += `\n" +
-                "                        <div class=\\\"property-group\\\">\n" +
+                "                        <div class=\"property-group\">\n" +
                 "                            <label>${key}</label>\n" +
-                "                            <input type=\\\"text\\\" \n" +
-                "                                   value=\\\"${prop.value}\\\" \n" +
-                "                                   onchange=\\\"editor.updateNodeProperty(${node.id}, '${key}', this.value)\\\">\n" +
+                "                            <input type=\"text\" \n" +
+                "                                   value=\"${prop.value}\" \n" +
+                "                                   onchange=\"editor.updateNodeProperty(${node.id}, '${key}', this.value)\">\n" +
                 "                        </div>\n" +
                 "                    `;\n" +
                 "                } else {\n" +
                 "                    html += `\n" +
-                "                        <div class=\\\"property-group\\\">\n" +
+                "                        <div class=\"property-group\">\n" +
                 "                            <label>${key}</label>\n" +
-                "                            <div style=\\\"color: #ccc; font-size: 12px; margin-bottom: 5px;\\\">\n" +
+                "                            <div style=\"color: #ccc; font-size: 12px; margin-bottom: 5px;\">\n" +
                 "                                等待连接... <br>\n" +
                 "                                (类型: ${prop.dataType})\n" +
                 "                            </div>\n" +
@@ -687,25 +861,26 @@ public class NodeEditorFrontend {
                 "                }\n" +
                 "            } else if (prop.type === 'connection') {\n" +
                 "                html += `\n" +
-                "                    <div class=\\\"property-group\\\">\n" +
+                "                    <div class=\"property-group\">\n" +
                 "                        <label>${key}</label>\n" +
-                "                        <div style=\\\"color: #ccc; font-size: 12px; margin-bottom: 5px;\\\">\n" +
+                "                        <div style=\"color: #ccc; font-size: 12px; margin-bottom: 5px;\">\n" +
                 "                            连接到: <br>节点 ${prop.sourceNode} 的 <br>${prop.sourceOutput} 参数<br> <br> \n" +
                 "                        </div>\n" +
-                "                        <button type=\\\"button\\\" class=\\\"disconnect-btn\\\" onclick=\\\"editor.disconnectProperty(${node.id}, '${key}')\\\">断开连接</button>\n" +
+                "                        <button type=\"button\" class=\"disconnect-btn\" onclick=\"editor.disconnectProperty(${node.id}, '${key}')\">断开连接</button>\n" +
                 "                    </div>\n" +
                 "                `;\n" +
                 "            }\n" +
                 "        });\n" +
                 "        \n" +
                 "        html += `\n" +
-                "            <div class=\\\"property-group\\\" style=\\\"margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;\\\">\n" +
-                "                <button type=\\\"button\\\" class=\\\"delete-node-btn\\\" onclick=\\\"editor.deleteNode(${node.id})\\\">删除节点</button>\n" +
+                "            <div class=\"property-group\" style=\"margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;\">\n" +
+                "                <button type=\"button\" class=\"delete-node-btn\" onclick=\"editor.deleteNode(${node.id})\">删除节点</button>\n" +
                 "            </div>\n" +
                 "        `;\n" +
                 "        \n" +
                 "        content.innerHTML = html;\n" +
                 "    }\n" +
+                "    \n" +
                 "    updateNodeProperty(nodeId, property, value) {\n" +
                 "        const node = this.nodes.find(n => n.id === nodeId);\n" +
                 "        if (node && node.properties[property] && node.properties[property].type === 'constant') {\n" +
@@ -769,12 +944,14 @@ public class NodeEditorFrontend {
                 "        \n" +
                 "        const sourceRect = sourcePortEl.getBoundingClientRect();\n" +
                 "        const targetRect = targetPortEl.getBoundingClientRect();\n" +
-                "        const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
+                "        const canvas = document.getElementById('node-canvas');\n" +
+                "        const canvasRect = canvas.getBoundingClientRect();\n" +
                 "        \n" +
-                "        const startX = sourceRect.left + sourceRect.width / 2 - canvasRect.left;\n" +
-                "        const startY = sourceRect.top + sourceRect.height / 2 - canvasRect.top;\n" +
-                "        const endX = targetRect.left + targetRect.width / 2 - canvasRect.left;\n" +
-                "        const endY = targetRect.top + targetRect.height / 2 - canvasRect.top;\n" +
+                "        // 将屏幕坐标转换为变换空间坐标\n" +
+                "        const startX = (sourceRect.left + sourceRect.width / 2 - canvasRect.left - this.transform.x) / this.transform.scale;\n" +
+                "        const startY = (sourceRect.top + sourceRect.height / 2 - canvasRect.top - this.transform.y) / this.transform.scale;\n" +
+                "        const endX = (targetRect.left + targetRect.width / 2 - canvasRect.left - this.transform.x) / this.transform.scale;\n" +
+                "        const endY = (targetRect.top + targetRect.height / 2 - canvasRect.top - this.transform.y) / this.transform.scale;\n" +
                 "        \n" +
                 "        const svg = document.getElementById('connection-layer');\n" +
                 "        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');\n" +
@@ -808,7 +985,8 @@ public class NodeEditorFrontend {
                 "                sourcePort: conn.source.portName,\n" +
                 "                targetNode: conn.target.nodeId,\n" +
                 "                targetPort: conn.target.portName\n" +
-                "            }))\n" +
+                "            })),\n" +
+                "            transform: this.transform\n" +
                 "        };\n" +
                 "        \n" +
                 "        if (window.currentPhnFile) {\n" +
@@ -834,6 +1012,12 @@ public class NodeEditorFrontend {
                 "                    if (data.content) {\n" +
                 "                        const graphData = JSON.parse(data.content);\n" +
                 "                        this.nodes = graphData.nodes || [];\n" +
+                "                        \n" +
+                "                        // 加载变换状态\n" +
+                "                        if (graphData.transform) {\n" +
+                "                            this.transform = graphData.transform;\n" +
+                "                            this.updateTransform();\n" +
+                "                        }\n" +
                 "                        \n" +
                 "                        this.connections = (graphData.connections || []).map(conn => ({\n" +
                 "                            id: conn.id,\n" +
@@ -873,43 +1057,6 @@ public class NodeEditorFrontend {
                 "        this.nodes.forEach(node => this.renderNode(node));\n" +
                 "    }\n" +
                 "    \n" +
-                "    handleCanvasMouseDown(e) {\n" +
-                "        if (e.target === document.getElementById('node-canvas')) {\n" +
-                "            this.selectNode(null);\n" +
-                "        }\n" +
-                "    }\n" +
-                "    \n" +
-                "    handleCanvasMouseMove(e) {\n" +
-                "        if (this.connecting && this.tempConnection) {\n" +
-                "            const canvasRect = document.getElementById('node-canvas').getBoundingClientRect();\n" +
-                "            this.tempConnection.endX = e.clientX - canvasRect.left;\n" +
-                "            this.tempConnection.endY = e.clientY - canvasRect.top;\n" +
-                "            this.drawTempConnection();\n" +
-                "        }\n" +
-                "    }\n" +
-                "    \n" +
-                "    handleCanvasMouseUp(e) {\n" +
-                "        if (this.connecting && this.connectionSource) {\n" +
-                "            const targetPort = e.target.closest('.port');\n" +
-                "            if (targetPort) {\n" +
-                "                const targetNode = targetPort.closest('.node');\n" +
-                "                if (targetNode) {\n" +
-                "                    this.completeConnection(targetNode, targetPort);\n" +
-                "                } else {\n" +
-                "                    this.cleanupConnection();\n" +
-                "                }\n" +
-                "            } else {\n" +
-                "                this.cleanupConnection();\n" +
-                "            }\n" +
-                "        }\n" +
-                "    }\n" +
-                "    \n" +
-                "    handleCanvasDoubleClick(e) {\n" +
-                "        if (e.target === document.getElementById('node-canvas')) {\n" +
-                "            this.createNode('NodePrintLog', e.clientX, e.clientY);\n" +
-                "        }\n" +
-                "    }\n" +
-                "    \n" +
                 "    handleKeyDown(e) {\n" +
                 "        if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedNode) {\n" +
                 "            this.deleteNode(this.selectedNode.id);\n" +
@@ -918,10 +1065,21 @@ public class NodeEditorFrontend {
                 "        if (e.key === 'Escape' && this.connecting) {\n" +
                 "            this.cleanupConnection();\n" +
                 "        }\n" +
+                "        \n" +
+                "        // 快捷键：空格键重置视角\n" +
+                "        if (e.key === ' ' && e.target === document.body) {\n" +
+                "            e.preventDefault();\n" +
+                "            this.resetView();\n" +
+                "        }\n" +
                 "    }\n" +
                 "}\n" +
                 "\n" +
-                "const editor = new EnhancedNodeEditor();";
+                "const editor = new EnhancedNodeEditor();\n" +
+                "\n" +
+                "// 全局函数供HTML调用\n" +
+                "window.resetView = function() {\n" +
+                "    editor.resetView();\n" +
+                "};";
     }
 
     public static String getNodeEditorCSS() {
@@ -998,6 +1156,28 @@ public class NodeEditorFrontend {
                 "        linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);\n" +
                 "    background-size: 20px 20px;\n" +
                 "    cursor: default;\n" +
+                "}\n" +
+                "\n" +
+                ".transform-container {\n" +
+                "    position: absolute;\n" +
+                "    width: 100%;\n" +
+                "    height: 100%;\n" +
+                "    transform-origin: 0 0;\n" +
+                "}\n" +
+                "        \n" +
+                ".view-info {\n" +
+                "    position: absolute;\n" +
+                "    bottom: 10px;\n" +
+                "    right: 10px;\n" +
+                "    background: rgba(0, 0, 0, 0.7);\n" +
+                "    padding: 5px 10px;\n" +
+                "    border-radius: 4px;\n" +
+                "    font-size: 12px;\n" +
+                "    color: #ccc;\n" +
+                "    display: flex;\n" +
+                "    flex-direction: column;\n" +
+                "    gap: 2px;\n" +
+                "    pointer-events: none;\n" +
                 "}\n" +
                 "        \n" +
                 ".node {\n" +
