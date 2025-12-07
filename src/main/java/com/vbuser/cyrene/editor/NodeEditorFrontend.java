@@ -155,6 +155,50 @@ public class NodeEditorFrontend {
                 "                <div>注销复活点</div>\n" +
                 "                <div style=\"font-size: 12px; color: #ccc;\">为该玩家注销指定序号的复活点</div>\n" +
                 "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeActivateExtraCollision\">\n" +
+                "                <div>激活/关闭额外碰撞</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">控制玩家与指定序号额外碰撞体的交互状态</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeActivateExtraCollisionClimb\">\n" +
+                "                <div>激活/关闭额外碰撞可攀爬性</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">设置指定额外碰撞体是否允许玩家攀爬</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeActivateNativeCollision\">\n" +
+                "                <div>激活/关闭原生碰撞</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">控制玩家与原生场景碰撞体的交互状态</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeActivateNativeCollisionClimb\">\n" +
+                "                <div>激活/关闭原生碰撞可攀爬性</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">设置原生场景碰撞体是否允许玩家攀爬</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeActivateCollisionTrigger\">\n" +
+                "                <div>激活/关闭碰撞触发器</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">启用或禁用指定序号的碰撞触发器检测</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeAttack\">\n" +
+                "                <div>发起攻击</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">使目标实体执行攻击动作并造成伤害</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeHeal\">\n" +
+                "                <div>恢复生命</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">基于能力单元配置为目标实体恢复生命值</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeDamage\">\n" +
+                "                <div>损失生命</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">使目标实体承受指定伤害并触发伤害流程</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeDirectHeal\">\n" +
+                "                <div>直接恢复生命</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">直接为目标实体恢复生命并产生治疗标签与仇恨</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeRestoreMotion\">\n" +
+                "                <div>恢复基础运动器</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">将指定的基础运动器状态重置为初始配置</div>\n" +
+                "            </div>\n" +
+                "            <div class=\"node-item\" data-type=\"NodeStartMotion\">\n" +
+                "                <div>开启定点运动器</div>\n" +
+                "                <div style=\"font-size: 12px; color: #ccc;\">启动指定运动器并控制实体按预设轨迹移动</div>\n" +
+                "            </div>\n" +
                 "        </div>\n" +
                 "        \n" +
                 "        <div class=\"node-canvas\" id=\"node-canvas\">\n" +
@@ -194,7 +238,8 @@ public class NodeEditorFrontend {
                 "        this.tempConnection = null;\n" +
                 "        this.nodeConfigs = {};\n" +
                 "        \n" +
-                "        // 画布变换相关\n" +
+                "        this.selectedNodeType = null;\n" +
+                "        \n" +
                 "        this.transform = {\n" +
                 "            x: 0,\n" +
                 "            y: 0,\n" +
@@ -251,30 +296,46 @@ public class NodeEditorFrontend {
                 "            if (e.target.closest('.node-item')) {\n" +
                 "                const item = e.target.closest('.node-item');\n" +
                 "                const type = item.dataset.type;\n" +
-                "                this.createNode(type, e.clientX, e.clientY);\n" +
+                "                \n" +
+                "                if (e.button === 0) {\n" +
+                "                    e.preventDefault();\n" +
+                "                    this.selectNodeType(type, item);\n" +
+                "                }\n" +
                 "            }\n" +
                 "        });\n" +
                 "        \n" +
-                "        // 画布事件监听\n" +
                 "        canvas.addEventListener('wheel', this.handleCanvasWheel.bind(this));\n" +
                 "        canvas.addEventListener('mousedown', this.handleCanvasMouseDown.bind(this));\n" +
                 "        canvas.addEventListener('mousemove', this.handleCanvasMouseMove.bind(this));\n" +
                 "        canvas.addEventListener('mouseup', this.handleCanvasMouseUp.bind(this));\n" +
                 "        canvas.addEventListener('dblclick', this.handleCanvasDoubleClick.bind(this));\n" +
                 "        \n" +
-                "        // 防止拖拽触发选择文本\n" +
                 "        canvas.addEventListener('dragstart', (e) => e.preventDefault());\n" +
                 "        \n" +
-                "        // 防止右键菜单\n" +
                 "        canvas.addEventListener('contextmenu', (e) => e.preventDefault());\n" +
                 "        \n" +
                 "        document.addEventListener('keydown', this.handleKeyDown.bind(this));\n" +
                 "        \n" +
-                "        // 初始应用变换\n" +
                 "        this.updateTransform();\n" +
                 "    }\n" +
                 "    \n" +
-                "    // 画布变换相关方法\n" +
+                "    selectNodeType(type, element) {\n" +
+                "        this.clearNodeTypeSelection();\n" +
+                "        this.selectedNodeType = type;\n" +
+                "        element.classList.add('selected');\n" +
+                "        element.style.cursor = 'default';\n" +
+                "        document.getElementById('node-canvas').style.cursor = 'crosshair';\n" +
+                "    }\n" +
+                "    \n" +
+                "    clearNodeTypeSelection() {\n" +
+                "        document.querySelectorAll('.node-item.selected').forEach(item => {\n" +
+                "            item.classList.remove('selected');\n" +
+                "            item.style.cursor = 'grab';\n" +
+                "        });\n" +
+                "        this.selectedNodeType = null;\n" +
+                "        document.getElementById('node-canvas').style.cursor = 'default';\n" +
+                "    }\n" +
+                "    \n" +
                 "    updateTransform() {\n" +
                 "        const container = document.getElementById('transform-container');\n" +
                 "        container.style.transform = `translate(${this.transform.x}px, ${this.transform.y}px) scale(${this.transform.scale})`;\n" +
@@ -302,19 +363,15 @@ public class NodeEditorFrontend {
                 "        const canvas = document.getElementById('node-canvas');\n" +
                 "        const rect = canvas.getBoundingClientRect();\n" +
                 "        \n" +
-                "        // 鼠标相对于画布的坐标\n" +
                 "        const mouseX = e.clientX - rect.left;\n" +
                 "        const mouseY = e.clientY - rect.top;\n" +
                 "        \n" +
-                "        // 缩放前的鼠标在变换空间中的坐标\n" +
                 "        const worldX = (mouseX - this.transform.x) / this.transform.scale;\n" +
                 "        const worldY = (mouseY - this.transform.y) / this.transform.scale;\n" +
                 "        \n" +
-                "        // 计算缩放\n" +
                 "        const delta = e.deltaY > 0 ? 0.9 : 1.1;\n" +
                 "        const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.transform.scale * delta));\n" +
                 "        \n" +
-                "        // 调整位移，使鼠标下的点保持在同一位置\n" +
                 "        this.transform.x = mouseX - worldX * newScale;\n" +
                 "        this.transform.y = mouseY - worldY * newScale;\n" +
                 "        this.transform.scale = newScale;\n" +
@@ -323,7 +380,6 @@ public class NodeEditorFrontend {
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasMouseDown(e) {\n" +
-                "        // 中键按下：开始平移\n" +
                 "        if (e.button === 1) {\n" +
                 "            e.preventDefault();\n" +
                 "            this.isPanning = true;\n" +
@@ -332,7 +388,6 @@ public class NodeEditorFrontend {
                 "            return;\n" +
                 "        }\n" +
                 "        \n" +
-                "        // 左键按下：检查是否点击了节点或连接点\n" +
                 "        if (e.button === 0) {\n" +
                 "            const node = e.target.closest('.node');\n" +
                 "            if (node) {\n" +
@@ -340,18 +395,15 @@ public class NodeEditorFrontend {
                 "                    e.preventDefault();\n" +
                 "                    this.selectNode(node);\n" +
                 "                    \n" +
-                "                    // 开始拖拽节点\n" +
                 "                    this.startDragging(node, e);\n" +
                 "                }\n" +
                 "            } else {\n" +
-                "                // 点击画布空白处，取消选择\n" +
                 "                this.selectNode(null);\n" +
                 "            }\n" +
                 "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasMouseMove(e) {\n" +
-                "        // 处理画布平移\n" +
                 "        if (this.isPanning) {\n" +
                 "            const deltaX = e.clientX - this.lastPanPoint.x;\n" +
                 "            const deltaY = e.clientY - this.lastPanPoint.y;\n" +
@@ -364,14 +416,12 @@ public class NodeEditorFrontend {
                 "            return;\n" +
                 "        }\n" +
                 "        \n" +
-                "        // 处理临时连接线\n" +
                 "        if (this.connecting && this.tempConnection) {\n" +
                 "            const canvas = document.getElementById('node-canvas');\n" +
                 "            const rect = canvas.getBoundingClientRect();\n" +
                 "            const mouseX = e.clientX - rect.left;\n" +
                 "            const mouseY = e.clientY - rect.top;\n" +
                 "            \n" +
-                "            // 将屏幕坐标转换为变换空间坐标\n" +
                 "            const worldX = (mouseX - this.transform.x) / this.transform.scale;\n" +
                 "            const worldY = (mouseY - this.transform.y) / this.transform.scale;\n" +
                 "            \n" +
@@ -380,12 +430,10 @@ public class NodeEditorFrontend {
                 "            this.drawTempConnection();\n" +
                 "        }\n" +
                 "        \n" +
-                "        // 处理节点拖拽\n" +
                 "        if (this.dragging && this.draggingNode) {\n" +
                 "            const canvas = document.getElementById('node-canvas');\n" +
                 "            const rect = canvas.getBoundingClientRect();\n" +
                 "            \n" +
-                "            // 将屏幕坐标转换为变换空间坐标\n" +
                 "            const worldX = (e.clientX - rect.left - this.dragOffset.x - this.transform.x) / this.transform.scale;\n" +
                 "            const worldY = (e.clientY - rect.top - this.dragOffset.y - this.transform.y) / this.transform.scale;\n" +
                 "            \n" +
@@ -404,7 +452,6 @@ public class NodeEditorFrontend {
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasMouseUp(e) {\n" +
-                "        // 结束画布平移\n" +
                 "        if (e.button === 1 && this.isPanning) {\n" +
                 "            this.isPanning = false;\n" +
                 "            document.getElementById('node-canvas').style.cursor = 'default';\n" +
@@ -412,7 +459,6 @@ public class NodeEditorFrontend {
                 "            return;\n" +
                 "        }\n" +
                 "        \n" +
-                "        // 处理连接完成\n" +
                 "        if (this.connecting && this.connectionSource && e.button === 0) {\n" +
                 "            const targetPort = e.target.closest('.port');\n" +
                 "            if (targetPort) {\n" +
@@ -427,26 +473,26 @@ public class NodeEditorFrontend {
                 "            }\n" +
                 "        }\n" +
                 "        \n" +
-                "        // 结束节点拖拽\n" +
                 "        if (e.button === 0 && this.dragging) {\n" +
                 "            this.handleDragEnd();\n" +
                 "        }\n" +
                 "    }\n" +
                 "    \n" +
                 "    handleCanvasDoubleClick(e) {\n" +
-                "        if (e.target.id === 'node-canvas' || e.target.id === 'transform-container') {\n" +
+                "        if ((e.target.id === 'node-canvas' || e.target.id === 'transform-container') && this.selectedNodeType) {\n" +
                 "            const canvas = document.getElementById('node-canvas');\n" +
                 "            const rect = canvas.getBoundingClientRect();\n" +
                 "            \n" +
-                "            // 将屏幕坐标转换为变换空间坐标\n" +
                 "            const worldX = (e.clientX - rect.left - this.transform.x) / this.transform.scale;\n" +
                 "            const worldY = (e.clientY - rect.top - this.transform.y) / this.transform.scale;\n" +
                 "            \n" +
-                "            this.createNode('NodePrintLog', worldX, worldY);\n" +
+                "            this.createNodeAtPosition(this.selectedNodeType, worldX, worldY);\n" +
+                "            \n" +
+                "            this.clearNodeTypeSelection();\n" +
                 "        }\n" +
                 "    }\n" +
                 "    \n" +
-                "    createNode(type, x, y) {\n" +
+                "    createNodeAtPosition(type, worldX, worldY) {\n" +
                 "        const nodeId = Date.now();\n" +
                 "        const config = this.nodeConfigs[type];\n" +
                 "        \n" +
@@ -455,28 +501,21 @@ public class NodeEditorFrontend {
                 "            return;\n" +
                 "        }\n" +
                 "        \n" +
-                "        // 如果未提供坐标，则创建在视口中心\n" +
-                "        let nodeX = x;\n" +
-                "        let nodeY = y;\n" +
+                "        worldX -= 90;\n" +
+                "        worldY -= 50;\n" +
                 "        \n" +
-                "        if (nodeX === undefined || nodeY === undefined) {\n" +
-                "            const canvas = document.getElementById('node-canvas');\n" +
-                "            const canvasRect = canvas.getBoundingClientRect();\n" +
-                "            \n" +
-                "            // 将画布中心转换为变换空间坐标\n" +
-                "            const centerX = canvasRect.width / 2;\n" +
-                "            const centerY = canvasRect.height / 2;\n" +
-                "            \n" +
-                "            nodeX = (centerX - this.transform.x) / this.transform.scale - 90; // 减去节点宽度的一半\n" +
-                "            nodeY = (centerY - this.transform.y) / this.transform.scale - 50; // 减去节点高度的一半\n" +
-                "        }\n" +
+                "        const adjustedPosition = this.adjustPositionToAvoidOverlap(worldX, worldY);\n" +
+                "        worldX = adjustedPosition.x;\n" +
+                "        worldY = adjustedPosition.y;\n" +
                 "        \n" +
                 "        const node = {\n" +
                 "            id: nodeId,\n" +
                 "            type: type,\n" +
                 "            name: config.name,\n" +
-                "            position: { x: nodeX, y: nodeY },\n" +
-                "            properties: {}\n" +
+                "            position: { x: worldX, y: worldY },\n" +
+                "            properties: {},\n" +
+                "            width: 180,\n" +
+                "            height: 100\n" +
                 "        };\n" +
                 "        \n" +
                 "        config.inputs.forEach(input => {\n" +
@@ -492,6 +531,51 @@ public class NodeEditorFrontend {
                 "        this.nodes.push(node);\n" +
                 "        this.renderNode(node);\n" +
                 "        this.saveToFile();\n" +
+                "    }\n" +
+                "    \n" +
+                "    isPositionEmpty(x, y, width = 180, height = 100) {\n" +
+                "        const margin = 40;\n" +
+                "        \n" +
+                "        for (const node of this.nodes) {\n" +
+                "            const nodeRight = node.position.x + (node.width || 180);\n" +
+                "            const nodeBottom = node.position.y + (node.height || 100);\n" +
+                "            const newNodeRight = x + width;\n" +
+                "            const newNodeBottom = y + height;\n" +
+                "            \n" +
+                "            if (!(newNodeRight + margin < node.position.x ||\n" +
+                "                  x > nodeRight + margin ||\n" +
+                "                  newNodeBottom + margin < node.position.y ||\n" +
+                "                  y > nodeBottom + margin)) {\n" +
+                "                return false;\n" +
+                "            }\n" +
+                "        }\n" +
+                "        return true;\n" +
+                "    }\n" +
+                "    \n" +
+                "    adjustPositionToAvoidOverlap(x, y, width = 180, height = 100) {\n" +
+                "        let newX = x;\n" +
+                "        let newY = y;\n" +
+                "        \n" +
+                "        if (this.nodes.length === 0) {\n" +
+                "            return { x: newX, y: newY };\n" +
+                "        }\n" +
+                "        \n" +
+                "        for (const node of this.nodes) {\n" +
+                "            const nodeRight = node.position.x + (node.width || 180);\n" +
+                "            const nodeBottom = node.position.y + (node.height || 100);\n" +
+                "            const newNodeRight = newX + width;\n" +
+                "            const newNodeBottom = newY + height;\n" +
+                "            \n" +
+                "            if (!(newNodeRight < node.position.x ||\n" +
+                "                  newX > nodeRight ||\n" +
+                "                  newNodeBottom < node.position.y ||\n" +
+                "                  newY > nodeBottom)) {\n" +
+                "                newY = nodeBottom + 40;\n" +
+                "                return this.adjustPositionToAvoidOverlap(newX, newY, width, height);\n" +
+                "            }\n" +
+                "        }\n" +
+                "        \n" +
+                "        return { x: newX, y: newY };\n" +
                 "    }\n" +
                 "    \n" +
                 "    getDefaultValue(type) {\n" +
@@ -514,8 +598,12 @@ public class NodeEditorFrontend {
                 "        \n" +
                 "        const nodeEl = document.createElement('div');\n" +
                 "        nodeEl.className = 'node';\n" +
-                "        nodeEl.style.left = node.position.x + 'px';\n" +
-                "        nodeEl.style.top = node.position.y + 'px';\n" +
+                "        \n" +
+                "        const x = Math.max(0, node.position.x);\n" +
+                "        const y = Math.max(0, node.position.y);\n" +
+                "        \n" +
+                "        nodeEl.style.left = x + 'px';\n" +
+                "        nodeEl.style.top = y + 'px';\n" +
                 "        nodeEl.dataset.nodeId = node.id;\n" +
                 "        \n" +
                 "        let portsHTML = '<div class=\"node-ports\">';\n" +
@@ -523,13 +611,16 @@ public class NodeEditorFrontend {
                 "        \n" +
                 "        config.inputs.forEach(input => {\n" +
                 "            const portType = input.index < 0 ? 'logic' : 'param';\n" +
+                "            const shortDescription = input.description.length > 15 ? \n" +
+                "                input.description.substring(0, 12) + '...' : input.description;\n" +
                 "            portsHTML += `\n" +
                 "                <div class=\"port input-port ${portType}-port\" \n" +
                 "                     data-port-name=\"${input.name}\" \n" +
                 "                     data-port-type=\"input\"\n" +
-                "                     data-data-type=\"${input.type}\">\n" +
+                "                     data-data-type=\"${input.type}\"\n" +
+                "                     title=\"${input.description}\">\n" +
                 "                    <div class=\"port-dot\"></div>\n" +
-                "                    <span>${input.description}</span>\n" +
+                "                    <span class=\"port-label\">${shortDescription}</span>\n" +
                 "                </div>\n" +
                 "            `;\n" +
                 "        });\n" +
@@ -538,12 +629,15 @@ public class NodeEditorFrontend {
                 "        \n" +
                 "        config.outputs.forEach(output => {\n" +
                 "            const portType = output.index < 0 ? 'logic' : 'param';\n" +
+                "            const shortDescription = output.description.length > 15 ? \n" +
+                "                output.description.substring(0, 12) + '...' : output.description;\n" +
                 "            portsHTML += `\n" +
                 "                <div class=\"port output-port ${portType}-port\"\n" +
                 "                     data-port-name=\"${output.name}\"\n" +
                 "                     data-port-type=\"output\" \n" +
-                "                     data-data-type=\"${output.type}\">\n" +
-                "                    <span>${output.description}</span>\n" +
+                "                     data-data-type=\"${output.type}\"\n" +
+                "                     title=\"${output.description}\">\n" +
+                "                    <span class=\"port-label\">${shortDescription}</span>\n" +
                 "                    <div class=\"port-dot\"></div>\n" +
                 "                </div>\n" +
                 "            `;\n" +
@@ -620,7 +714,6 @@ public class NodeEditorFrontend {
                 "        const canvas = document.getElementById('node-canvas');\n" +
                 "        const canvasRect = canvas.getBoundingClientRect();\n" +
                 "        \n" +
-                "        // 将屏幕坐标转换为变换空间坐标\n" +
                 "        const startX = (portRect.left + portRect.width / 2 - canvasRect.left - this.transform.x) / this.transform.scale;\n" +
                 "        const startY = (portRect.top + portRect.height / 2 - canvasRect.top - this.transform.y) / this.transform.scale;\n" +
                 "        \n" +
@@ -667,12 +760,28 @@ public class NodeEditorFrontend {
                 "    \n" +
                 "    createBezierPath(startX, startY, endX, endY) {\n" +
                 "        const dx = endX - startX;\n" +
-                "        const controlOffset = Math.min(Math.abs(dx) * 0.5, 100);\n" +
+                "        const dy = endY - startY;\n" +
+                "        const distance = Math.sqrt(dx * dx + dy * dy);\n" +
                 "        \n" +
-                "        const cp1x = startX + controlOffset;\n" +
-                "        const cp1y = startY;\n" +
-                "        const cp2x = endX - controlOffset;\n" +
-                "        const cp2y = endY;\n" +
+                "        const baseOffset = 80;\n" +
+                "        const dynamicOffset = Math.min(Math.abs(dx) * 0.7, 150);\n" +
+                "        const horizontalOffset = Math.max(baseOffset, dynamicOffset);\n" +
+                "        \n" +
+                "        const verticalOffset = Math.min(Math.abs(dy) * 0.3, 60);\n" +
+                "        \n" +
+                "        let cp1x, cp1y, cp2x, cp2y;\n" +
+                "        \n" +
+                "        if (dx >= 0) {\n" +
+                "            cp1x = startX + horizontalOffset;\n" +
+                "            cp1y = startY + verticalOffset;\n" +
+                "            cp2x = endX - horizontalOffset;\n" +
+                "            cp2y = endY - verticalOffset;\n" +
+                "        } else {\n" +
+                "            cp1x = startX - horizontalOffset;\n" +
+                "            cp1y = startY + verticalOffset;\n" +
+                "            cp2x = endX + horizontalOffset;\n" +
+                "            cp2y = endY - verticalOffset;\n" +
+                "        }\n" +
                 "        \n" +
                 "        return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;\n" +
                 "    }\n" +
@@ -947,7 +1056,6 @@ public class NodeEditorFrontend {
                 "        const canvas = document.getElementById('node-canvas');\n" +
                 "        const canvasRect = canvas.getBoundingClientRect();\n" +
                 "        \n" +
-                "        // 将屏幕坐标转换为变换空间坐标\n" +
                 "        const startX = (sourceRect.left + sourceRect.width / 2 - canvasRect.left - this.transform.x) / this.transform.scale;\n" +
                 "        const startY = (sourceRect.top + sourceRect.height / 2 - canvasRect.top - this.transform.y) / this.transform.scale;\n" +
                 "        const endX = (targetRect.left + targetRect.width / 2 - canvasRect.left - this.transform.x) / this.transform.scale;\n" +
@@ -1013,7 +1121,6 @@ public class NodeEditorFrontend {
                 "                        const graphData = JSON.parse(data.content);\n" +
                 "                        this.nodes = graphData.nodes || [];\n" +
                 "                        \n" +
-                "                        // 加载变换状态\n" +
                 "                        if (graphData.transform) {\n" +
                 "                            this.transform = graphData.transform;\n" +
                 "                            this.updateTransform();\n" +
@@ -1066,17 +1173,19 @@ public class NodeEditorFrontend {
                 "            this.cleanupConnection();\n" +
                 "        }\n" +
                 "        \n" +
-                "        // 快捷键：空格键重置视角\n" +
                 "        if (e.key === ' ' && e.target === document.body) {\n" +
                 "            e.preventDefault();\n" +
                 "            this.resetView();\n" +
+                "        }\n" +
+                "        \n" +
+                "        if (e.key === 'Escape') {\n" +
+                "            this.clearNodeTypeSelection();\n" +
                 "        }\n" +
                 "    }\n" +
                 "}\n" +
                 "\n" +
                 "const editor = new EnhancedNodeEditor();\n" +
                 "\n" +
-                "// 全局函数供HTML调用\n" +
                 "window.resetView = function() {\n" +
                 "    editor.resetView();\n" +
                 "};";
@@ -1105,6 +1214,7 @@ public class NodeEditorFrontend {
                 "    --logic-color: #d19a66;\n" +
                 "    --param-color: #499c54;\n" +
                 "    --error-color: #e06c75;\n" +
+                "    --selection-color: #3a5f8a;\n" +
                 "}\n" +
                 "        \n" +
                 ".node-editor-container {\n" +
@@ -1145,6 +1255,12 @@ public class NodeEditorFrontend {
                 "    background: #4a4a4a;\n" +
                 "    transform: translateY(-2px);\n" +
                 "}\n" +
+                "\n" +
+                ".node-item.selected {\n" +
+                "    background: var(--selection-color);\n" +
+                "    border-left: 4px solid #ff9800;\n" +
+                "    cursor: default;\n" +
+                "}\n" +
                 "        \n" +
                 ".node-canvas {\n" +
                 "    flex: 1;\n" +
@@ -1156,6 +1272,10 @@ public class NodeEditorFrontend {
                 "        linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);\n" +
                 "    background-size: 20px 20px;\n" +
                 "    cursor: default;\n" +
+                "}\n" +
+                "\n" +
+                ".node-canvas.crosshair {\n" +
+                "    cursor: crosshair;\n" +
                 "}\n" +
                 "\n" +
                 ".transform-container {\n" +
@@ -1183,6 +1303,7 @@ public class NodeEditorFrontend {
                 ".node {\n" +
                 "    position: absolute;\n" +
                 "    min-width: 180px;\n" +
+                "    max-width: 220px;\n" +
                 "    background: var(--bg-secondary);\n" +
                 "    border: 2px solid #555;\n" +
                 "    border-radius: 8px;\n" +
@@ -1209,6 +1330,9 @@ public class NodeEditorFrontend {
                 "    font-weight: bold;\n" +
                 "    font-size: 14px;\n" +
                 "    user-select: none;\n" +
+                "    white-space: nowrap;\n" +
+                "    overflow: hidden;\n" +
+                "    text-overflow: ellipsis;\n" +
                 "}\n" +
                 "        \n" +
                 ".node-content {\n" +
@@ -1226,6 +1350,7 @@ public class NodeEditorFrontend {
                 "    display: flex;\n" +
                 "    flex-direction: column;\n" +
                 "    gap: 6px;\n" +
+                "    max-width: 100px;\n" +
                 "}\n" +
                 "        \n" +
                 ".port {\n" +
@@ -1254,6 +1379,13 @@ public class NodeEditorFrontend {
                 "        \n" +
                 ".output-port {\n" +
                 "    flex-direction: row-reverse;\n" +
+                "}\n" +
+                "        \n" +
+                ".port-label {\n" +
+                "    white-space: nowrap;\n" +
+                "    overflow: hidden;\n" +
+                "    text-overflow: ellipsis;\n" +
+                "    max-width: 80px;\n" +
                 "}\n" +
                 "        \n" +
                 ".port-dot {\n" +

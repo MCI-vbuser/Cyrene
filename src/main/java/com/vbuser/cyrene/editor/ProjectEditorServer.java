@@ -521,6 +521,153 @@ public class ProjectEditorServer {
                     deactivateRevivePointNode.put("outputs", new JSONArray()
                             .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
                     nodeTypes.put(deactivateRevivePointNode);
+                    // 1.1.9 碰撞
+                    // 激活/关闭额外碰撞
+                    JSONObject activateExtraCollisionNode = new JSONObject();
+                    activateExtraCollisionNode.put("type", "NodeActivateExtraCollision");
+                    activateExtraCollisionNode.put("name", "激活/关闭额外碰撞");
+                    activateExtraCollisionNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("extra_index",1, "int", "额外碰撞序号", false))
+                            .put(createParameterConfig("activate", 2, "boolean", "是否激活", false)));
+                    activateExtraCollisionNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(activateExtraCollisionNode);
+                    // 激活/关闭额外碰撞可攀爬性
+                    JSONObject activateExtraCollisionClimbNode = new JSONObject();
+                    activateExtraCollisionClimbNode.put("type", "NodeActivateExtraCollisionClimb");
+                    activateExtraCollisionClimbNode.put("name", "激活/关闭额外碰撞可攀爬性");
+                    activateExtraCollisionClimbNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("extra_index", 1, "int", "额外碰撞序号", false))
+                            .put(createParameterConfig("climb", 2, "boolean", "是否激活", false)));
+                    activateExtraCollisionClimbNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(activateExtraCollisionClimbNode);
+                    // 激活/关闭原生碰撞
+                    JSONObject activateNativeCollisionNode = new JSONObject();
+                    activateNativeCollisionNode.put("type", "NodeActivateNativeCollision");
+                    activateNativeCollisionNode.put("name", "激活/关闭原生碰撞");
+                    activateNativeCollisionNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("activate", 1, "boolean", "是否激活", false)));
+                    activateNativeCollisionNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(activateNativeCollisionNode);
+                    // 激活/关闭原生碰撞可攀爬性
+                    JSONObject activateNativeCollisionClimbNode = new JSONObject();
+                    activateNativeCollisionClimbNode.put("type", "NodeActivateNativeCollisionClimb");
+                    activateNativeCollisionClimbNode.put("name", "激活/关闭原生碰撞可攀爬性");
+                    activateNativeCollisionClimbNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("climb", 1, "boolean", "是否激活", false)));
+                    activateNativeCollisionClimbNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(activateNativeCollisionClimbNode);
+                    // 1.1.10 碰撞触发器
+                    // 激活/关闭碰撞触发器
+                    JSONObject activateCollisionTriggerNode = new JSONObject();
+                    activateCollisionTriggerNode.put("type", "NodeActivateCollisionTrigger");
+                    activateCollisionTriggerNode.put("name", "激活/关闭碰撞触发器");
+                    activateCollisionTriggerNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("activate", 1, "int", "触发器序号", false))
+                            .put(createParameterConfig("activate", 2, "boolean", "是否激活", false)));
+                    activateCollisionTriggerNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(activateCollisionTriggerNode);
+                    // 1.1.11 战斗
+                    // 发起攻击
+                    JSONObject attackNode = new JSONObject();
+                    attackNode.put("type", "NodeAttack");
+                    attackNode.put("name", "发起攻击");
+                    attackNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("damage", 1, "float", "伤害系数", false))
+                            .put(createParameterConfig("extra", 2, "float", "伤害增量", false))
+                            .put(createParameterConfig("offset", 3, "vec3d", "位置偏移", false))
+                            .put(createParameterConfig("rotation", 4, "vec3d", "旋转偏移", false))
+                            .put(createParameterConfig("unit", 5, "string", "能力单元", false))
+                            .put(createParameterConfig("override", 6, "boolean", "是否覆写能力单元配置", false))
+                            .put(createParameterConfig("attacker", 7, "entity", "发起者实体", false)));
+                    attackNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(attackNode);
+                    // 恢复生命
+                    JSONObject healNode = new JSONObject();
+                    healNode.put("type", "NodeHeal");
+                    healNode.put("name", "恢复生命");
+                    healNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("amount", 1, "float", "恢复量", false))
+                            .put(createParameterConfig("unit", 2, "string", "能力单元", false))
+                            .put(createParameterConfig("override", 3, "boolean", "是否覆写能力单元配置", false))
+                            .put(createParameterConfig("healer", 4, "entity", "恢复发起者实体", false)));
+                    healNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(healNode);
+                    // 损失生命
+                    JSONObject damageNode = new JSONObject();
+                    damageNode.put("type", "NodeDamage");
+                    damageNode.put("name", "损失生命");
+                    damageNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("amount", 1, "float", "生命损失量", false))
+                            .put(createParameterConfig("kill", 2, "boolean", "是否致命", false))
+                            .put(createParameterConfig("undefeatable", 3, "boolean", "是否可被无敌阻挡", false))
+                            .put(createParameterConfig("lock", 4, "boolean", "是否可被锁血抵挡", false))
+                            .put(createParameterConfig("type", 5, "enum", "伤害跳字类型", false)));
+                    damageNode.put("outputs", new JSONArray()
+                    .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(damageNode);
+                    // 直接恢复生命
+                    JSONObject directHealNode = new JSONObject();
+                    directHealNode.put("type", "NodeDirectHeal");
+                    directHealNode.put("name", "直接恢复生命");
+                    directHealNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("activator", 0, "entity", "恢复发起实体", false))
+                            .put(createParameterConfig("target", 1, "entity", "恢复目标实体", false))
+                            .put(createParameterConfig("amount", 2, "float", "恢复量", false))
+                            .put(createParameterConfig("ignore", 3, "boolean", "是否忽略恢复量调整", false))
+                            .put(createParameterConfig("rate", 4, "float", "产生仇恨的倍率", false))
+                            .put(createParameterConfig("extra", 5, "float", "产生仇恨的增量", false))
+                            .put(createParameterConfig("list", 6, "list", "治疗标签列表", false)));
+                    directHealNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(directHealNode);
+                    // 1.1.12 运动器
+                    // 恢复基础运动器
+                    JSONObject restoreMotionNode = new JSONObject();
+                    restoreMotionNode.put("type", "NodeRestoreMotion");
+                    restoreMotionNode.put("name", "恢复基础运动器");
+                    restoreMotionNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("motion", 1, "string", "运动器名称", false)));
+                    restoreMotionNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(restoreMotionNode);
+                    // 开启定点运动器
+                    JSONObject startMotionNode = new JSONObject();
+                    startMotionNode.put("type", "NodeStartMotion");
+                    startMotionNode.put("name", "开启定点运动器");
+                    startMotionNode.put("inputs", new JSONArray()
+                            .put(createParameterConfig("upstream", -1, "node", "上游节点", false))
+                            .put(createParameterConfig("player", 0, "entity", "目标实体", false))
+                            .put(createParameterConfig("motion", 1, "string", "运动器名称", false))
+                            .put(createParameterConfig("type", 2, "enum", "移动方式", false)));
+                    startMotionNode.put("outputs", new JSONArray()
+                            .put(createParameterConfig("downstream", -1, "node", "下游节点", true)));
+                    nodeTypes.put(startMotionNode);
 
                     config.put("nodeTypes", nodeTypes);
                     sendJsonResponse(exchange, config);
